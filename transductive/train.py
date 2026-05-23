@@ -1,6 +1,7 @@
 import random
 import os
 import argparse
+import json
 import torch
 import numpy as np
 from load_data import DataLoader
@@ -158,9 +159,39 @@ if __name__ == '__main__':
     opts.perf_file = f'results/{dataset}/{model.modelName}_perf.txt'
     print(f'==> perf_file: {opts.perf_file}')
     
-    config_str = '%.4f, %.4f, %.6f,  %d, %d, %d, %d, %.4f,%s\n' % (opts.lr, opts.decay_rate, opts.lamb, opts.hidden_dim, opts.attn_dim, opts.n_layer, opts.n_batch, opts.dropout, opts.act)
+    config = {
+        'lr': opts.lr,
+        'decay_rate': opts.decay_rate,
+        'lamb': opts.lamb,
+        'hidden_dim': opts.hidden_dim,
+        'attn_dim': opts.attn_dim,
+        'n_layer': opts.n_layer,
+        'n_batch': opts.n_batch,
+        'dropout': opts.dropout,
+        'act': opts.act,
+        'topk': opts.topk,
+        'fact_ratio': opts.fact_ratio,
+        'tau': opts.tau,
+        'remove_1hop_edges': opts.remove_1hop_edges,
+        'use_rel_codiffusion': opts.use_rel_codiffusion,
+    }
+    if opts.use_rel_codiffusion:
+        config.update({
+            'rel_line_topk': opts.rel_line_topk,
+            'rel_edge_threshold': opts.rel_edge_threshold,
+            'rel_tau': opts.rel_tau,
+            'rel_residual_alpha': opts.rel_residual_alpha,
+            'rel_diff_weight': opts.rel_diff_weight,
+            'rel_dropout': opts.rel_dropout,
+            'rel_layers_per_gnn': opts.rel_layers_per_gnn,
+            'rel_include_inverse': opts.rel_include_inverse,
+        })
+    legacy_config_str = '%.4f, %.4f, %.6f,  %d, %d, %d, %d, %.4f,%s\n' % (opts.lr, opts.decay_rate, opts.lamb, opts.hidden_dim, opts.attn_dim, opts.n_layer, opts.n_batch, opts.dropout, opts.act)
+    config_str = '[CONFIG] ' + json.dumps(config, sort_keys=True) + '\n'
+    print(legacy_config_str)
     print(config_str)
     with open(opts.perf_file, 'a+') as f:
+        f.write(legacy_config_str)
         f.write(config_str)  
 
     if args.weight != None:
