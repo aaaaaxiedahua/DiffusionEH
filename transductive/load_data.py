@@ -56,6 +56,7 @@ class DataLoader:
         if getattr(args, 'use_rel_codiffusion', False):
             self.rel_edge_index, self.rel_edge_weight = build_relation_line_graph(
                 self.fact_triple,
+                self.n_ent,
                 self.n_rel,
                 topk=args.rel_line_topk,
                 threshold=args.rel_edge_threshold,

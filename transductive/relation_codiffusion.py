@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-def build_relation_line_graph(triples, n_rel, topk=10, threshold=0.0, include_inverse=True):
+def build_relation_line_graph(triples, n_ent, n_rel, topk=10, threshold=0.0, include_inverse=True):
     """Build a relation transition graph from two-hop paths in fact triples.
 
     The returned edge index uses the same relation id space as DiffusionE:
@@ -12,7 +12,7 @@ def build_relation_line_graph(triples, n_rel, topk=10, threshold=0.0, include_in
     and the identity relation id 2*n_rel.
     """
     rel_count = 2 * n_rel + 1
-    adjacency = [[] for _ in range(rel_count)]
+    adjacency = [[] for _ in range(n_ent)]
     for h, r, t in triples:
         adjacency[h].append((r, t))
         if include_inverse:

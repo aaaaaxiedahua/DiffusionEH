@@ -237,6 +237,8 @@ def build_command(args, params):
 
 
 def command_to_string(cmd):
+    if os.name == "nt":
+        return subprocess.list2cmdline([str(item) for item in cmd])
     return shlex.join(str(item) for item in cmd)
 
 
@@ -271,7 +273,7 @@ def run_trial_command(cmd, cwd, patience, trial):
     popen_kwargs = {
         "cwd": cwd,
         "stdout": subprocess.PIPE,
-        "stderr": subprocess.STDOUT,
+        "stderr": None,
         "text": True,
         "bufsize": 1,
         "encoding": "utf-8",
@@ -351,13 +353,60 @@ def load_initial_params(path, inline_values):
             raise ValueError("Initial params JSON must be an object or a list of objects.")
 
     for value in inline_values:
-        params.append(json.loads(value))
+        params.append(parse_param_object(value))
 
     for item in params:
         if not isinstance(item, dict):
             raise ValueError("Each initial parameter group must be a JSON object.")
 
     return params
+
+
+def parse_param_object(value):
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+        value = value[1:-1]
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        # Windows cmd.exe strips unescaped double quotes in inline JSON. Accept a
+        # flat JSON-like object such as {topk:100,act:tanh,flag:true}.
+        return parse_cmd_flat_object(value)
+
+
+def parse_cmd_flat_object(value):
+    text = value.strip()
+    if not (text.startswith("{") and text.endswith("}")):
+        raise
+    body = text[1:-1].strip()
+    if not body:
+        return {}
+
+    result = {}
+    for item in body.split(","):
+        if ":" not in item:
+            raise ValueError(f"Invalid initial parameter item: {item}")
+        key, raw_value = item.split(":", 1)
+        key = key.strip().strip("'\"")
+        result[key] = parse_cmd_value(raw_value.strip())
+    return result
+
+
+def parse_cmd_value(value):
+    value = value.strip().strip("'\"")
+    lower = value.lower()
+    if lower == "true":
+        return True
+    if lower == "false":
+        return False
+    if lower == "null":
+        return None
+    try:
+        if any(ch in value for ch in [".", "e", "E"]):
+            return float(value)
+        return int(value)
+    except ValueError:
+        return value
 
 
 def make_objective(args):
