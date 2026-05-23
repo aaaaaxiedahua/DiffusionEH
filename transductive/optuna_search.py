@@ -101,11 +101,24 @@ DATASET_DEFAULTS = {
 
 
 DATASET_SEARCH_SPACE = {
-    "umls": {
+    "family": {
         "topk": [50, 100, 200],
-        "layers": [3, 4, 5, 6],
+        "layers": [6, 7, 8],
         "fact_ratio": (0.85, 0.95),
-        "hidden_dim": [32, 48, 64, 96],
+        "hidden_dim": [32, 48, 64],
+        "attn_dim": [3, 5, 8, 16],
+        "n_batch": [10, 20, 50],
+        "act": ["relu", "tanh", "idd"],
+        "lr": (1e-3, 6e-3),
+        "decay_rate": (0.990, 0.9999),
+        "lamb": (1e-6, 1e-4),
+        "dropout": (0.0, 0.4),
+    },
+    "umls": {
+        "topk": [50, 80, 100],
+        "layers": [4, 5, 6, 7, 8],
+        "fact_ratio": (0.85, 0.95),
+        "hidden_dim": [32, 48, 64, 96, 128],
         "attn_dim": [3, 5, 8, 16],
         "n_batch": [5, 10, 20],
         "act": ["relu", "tanh", "idd"],
@@ -113,25 +126,76 @@ DATASET_SEARCH_SPACE = {
         "decay_rate": (0.990, 0.9999),
         "lamb": (1e-5, 5e-4),
         "dropout": (0.0, 0.2),
-    }
+    },
+    "WN18RR": {
+        "topk": [500, 1000, 1500, 2000],
+        "layers": [6, 7, 8],
+        "fact_ratio": (0.93, 0.98),
+        "hidden_dim": [48, 64, 96, 128],
+        "attn_dim": [3, 5, 8, 16],
+        "n_batch": [20, 50],
+        "act": ["relu", "tanh", "idd"],
+        "lr": (1e-3, 6e-3),
+        "decay_rate": (0.985, 0.999),
+        "lamb": (1e-5, 5e-4),
+        "dropout": (0.0, 0.2),
+    },
+    "fb15k-237": {
+        "topk": [1000, 1500, 2000, 2500],
+        "layers": [5, 6, 7, 8],
+        "fact_ratio": (0.97, 0.995),
+        "hidden_dim": [32, 48, 64, 96],
+        "attn_dim": [3, 5, 8, 16],
+        "n_batch": [4, 6, 8, 10],
+        "act": ["relu", "tanh", "idd"],
+        "lr": (3e-4, 3e-3),
+        "decay_rate": (0.985, 0.999),
+        "lamb": (1e-5, 5e-4),
+        "dropout": (0.0, 0.2),
+    },
+    "nell": {
+        "topk": [1000, 1500, 2000, 2500],
+        "layers": [5, 6, 7],
+        "fact_ratio": (0.90, 0.98),
+        "hidden_dim": [64, 96, 128],
+        "attn_dim": [16, 32, 64],
+        "n_batch": [5, 10, 20],
+        "act": ["relu", "tanh", "idd"],
+        "lr": (5e-4, 3e-3),
+        "decay_rate": (0.985, 0.999),
+        "lamb": (1e-5, 5e-4),
+        "dropout": (0.05, 0.4),
+    },
+    "YAGO": {
+        "topk": [500, 1000, 1500, 2000],
+        "layers": [6, 7, 8],
+        "fact_ratio": (0.98, 0.998),
+        "hidden_dim": [48, 64, 96],
+        "attn_dim": [2, 3, 5, 8],
+        "n_batch": [3, 5, 8],
+        "act": ["relu", "tanh", "idd"],
+        "lr": (3e-4, 3e-3),
+        "decay_rate": (0.90, 0.99),
+        "lamb": (1e-5, 2e-3),
+        "dropout": (0.05, 0.4),
+    },
 }
 
 
 def suggest_original_params(trial, dataset):
     """Original DiffusionE search space supported by the current train.py."""
+    if dataset not in DATASET_SEARCH_SPACE:
+        raise ValueError(f"No search space configured for dataset: {dataset}")
     defaults = DATASET_DEFAULTS.get(dataset, {})
-    space = DATASET_SEARCH_SPACE.get(dataset, {})
-    fact_ratio_low, fact_ratio_high = space.get("fact_ratio", (0.85, 0.995))
-    lr_low, lr_high = space.get("lr", (5e-4, 8e-3))
-    decay_low, decay_high = space.get("decay_rate", (0.94, 0.9999))
-    lamb_low, lamb_high = space.get("lamb", (1e-6, 1e-3))
-    dropout_low, dropout_high = space.get("dropout", (0.0, 0.5))
+    space = DATASET_SEARCH_SPACE[dataset]
+    fact_ratio_low, fact_ratio_high = space["fact_ratio"]
+    lr_low, lr_high = space["lr"]
+    decay_low, decay_high = space["decay_rate"]
+    lamb_low, lamb_high = space["lamb"]
+    dropout_low, dropout_high = space["dropout"]
     params = {
-        "topk": trial.suggest_categorical(
-            "topk",
-            unique_sorted(space.get("topk", [50, 100, 200, 300, defaults.get("topk")]))
-        ),
-        "layers": trial.suggest_categorical("layers", unique_sorted(space.get("layers", [3, 4, 5, 6, 7, 8]))),
+        "topk": trial.suggest_categorical("topk", unique_sorted(space["topk"])),
+        "layers": trial.suggest_categorical("layers", unique_sorted(space["layers"])),
         "fact_ratio": trial.suggest_float("fact_ratio", fact_ratio_low, fact_ratio_high),
         "tau": trial.suggest_categorical("tau", [0.5, 1.0, 2.0]),
         "remove_1hop_edges": trial.suggest_categorical(
@@ -142,17 +206,17 @@ def suggest_original_params(trial, dataset):
         "lamb": trial.suggest_float("lamb", lamb_low, lamb_high, log=True),
         "hidden_dim": trial.suggest_categorical(
             "hidden_dim",
-            unique_sorted(space.get("hidden_dim", [16, 32, 48, 64, 128, defaults.get("hidden_dim")]))
+            unique_sorted(space["hidden_dim"])
         ),
         "attn_dim": trial.suggest_categorical(
             "attn_dim",
-            unique_sorted(space.get("attn_dim", [2, 5, 16, 32, 64, defaults.get("attn_dim")]))
+            unique_sorted(space["attn_dim"])
         ),
         "dropout": trial.suggest_float("dropout", dropout_low, dropout_high),
-        "act": trial.suggest_categorical("act", space.get("act", ["relu", "tanh", "idd"])),
+        "act": trial.suggest_categorical("act", space["act"]),
         "n_batch": trial.suggest_categorical(
             "n_batch",
-            unique_sorted(space.get("n_batch", [5, 10, 20, 30, defaults.get("n_batch")]))
+            unique_sorted(space["n_batch"])
         ),
     }
 
