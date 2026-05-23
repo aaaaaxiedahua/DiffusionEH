@@ -3,6 +3,7 @@ import torch
 from scipy.sparse import csr_matrix
 import numpy as np
 from collections import defaultdict
+from relation_codiffusion import build_relation_line_graph
 
 class DataLoader:
     def __init__(self, args):
@@ -50,6 +51,16 @@ class DataLoader:
         self.n_train = len(self.train_data)
         self.n_valid = len(self.valid_q)
         self.n_test  = len(self.test_q)
+        self.rel_edge_index = None
+        self.rel_edge_weight = None
+        if getattr(args, 'use_rel_codiffusion', False):
+            self.rel_edge_index, self.rel_edge_weight = build_relation_line_graph(
+                self.fact_triple,
+                self.n_rel,
+                topk=args.rel_line_topk,
+                threshold=args.rel_edge_threshold,
+                include_inverse=args.rel_include_inverse,
+            )
 
         for filt in self.filters:
             self.filters[filt] = list(self.filters[filt])

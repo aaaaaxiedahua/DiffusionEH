@@ -5,6 +5,7 @@ import time
 import numpy as np
 from   torch_scatter import scatter
 from   collections import defaultdict
+from   relation_codiffusion import RelationCoDiffusion
 
 class GNNLayer(torch.nn.Module):
     def __init__(self, in_dim, out_dim, attn_dim, n_rel, n_ent, n_node_topk=-1, n_edge_topk=-1, tau=1.0, act=lambda x:x):
@@ -41,13 +42,18 @@ class GNNLayer(torch.nn.Module):
             module.train(mode)
         return self
 
-    def forward(self, q_sub, q_rel, hidden, edges, nodes, old_nodes_new_idx, batchsize):
+    def forward(self, q_sub, q_rel, hidden, edges, nodes, old_nodes_new_idx, batchsize, rel_state=None, rel_diff_weight=1.0):
         sub     = edges[:,4]
         rel     = edges[:,2]
         obj     = edges[:,5]
         hs      = hidden[sub]
-        hr      = self.rela_embed(rel)
+        base_hr = self.rela_embed(rel)
         r_idx   = edges[:,0]
+        if rel_state is None:
+            hr = base_hr
+        else:
+            dynamic_hr = rel_state[r_idx, rel]
+            hr = (1.0 - rel_diff_weight) * base_hr + rel_diff_weight * dynamic_hr
         h_qr    = self.rela_embed(q_rel)[r_idx]
         n_node  = nodes.shape[0]
         message = nn.ReLU()(self.Ws1_attn(hs+hr) - self.Wr1_attn(hs+h_qr))
@@ -110,6 +116,8 @@ class GNNModel(torch.nn.Module):
         self.n_node_topk = params.n_node_topk
         self.n_edge_topk = params.n_edge_topk
         self.loader      = loader
+        self.use_rel_codiffusion = getattr(params, 'use_rel_codiffusion', False)
+        self.rel_diff_weight = getattr(params, 'rel_diff_weight', 0.5)
         acts = {'relu': nn.ReLU(), 'tanh': torch.tanh, 'idd': lambda x:x}
         act  = acts[params.act]
 
@@ -120,6 +128,21 @@ class GNNModel(torch.nn.Module):
                                             n_node_topk=i_n_node_topk, n_edge_topk=self.n_edge_topk, tau=params.tau, act=act))
 
         self.gnn_layers = nn.ModuleList(self.gnn_layers)       
+        if self.use_rel_codiffusion:
+            self.rel_codiffusion = RelationCoDiffusion(
+                self.hidden_dim,
+                self.attn_dim,
+                self.n_rel,
+                loader.rel_edge_index,
+                loader.rel_edge_weight,
+                tau=params.rel_tau,
+                residual_alpha=params.rel_residual_alpha,
+                dropout=params.rel_dropout,
+                layers_per_gnn=params.rel_layers_per_gnn,
+                act=act,
+            )
+        else:
+            self.rel_codiffusion = None
         self.dropout = nn.Dropout(params.dropout)
         self.W_final = nn.Linear(self.hidden_dim, 1, bias=False)
         self.gate    = nn.GRU(self.hidden_dim, self.hidden_dim)
@@ -144,9 +167,24 @@ class GNNModel(torch.nn.Module):
         hidden = torch.zeros(n, self.hidden_dim).cuda()                                  
     
         for i in range(self.n_layer):
+            rel_state = None
+            if self.rel_codiffusion is not None:
+                query_rel_embed = self.gnn_layers[i].rela_embed(q_rel)
+                rel_state = self.gnn_layers[i].rela_embed.weight
+                rel_state = self.rel_codiffusion(rel_state, query_rel_embed)
             nodes, edges, old_nodes_new_idx = self.loader.get_neighbors(nodes.data.cpu().numpy(), n, mode=mode)
             n_node  = nodes.size(0)
-            hidden, nodes, sampled_nodes_idx = self.gnn_layers[i](q_sub, q_rel, hidden, edges, nodes, old_nodes_new_idx, n)
+            hidden, nodes, sampled_nodes_idx = self.gnn_layers[i](
+                q_sub,
+                q_rel,
+                hidden,
+                edges,
+                nodes,
+                old_nodes_new_idx,
+                n,
+                rel_state=rel_state,
+                rel_diff_weight=self.rel_diff_weight,
+            )
             
             h0          = torch.zeros(1, n_node, hidden.size(1)).cuda().index_copy_(1, old_nodes_new_idx, h0)
             h0          = h0[0, sampled_nodes_idx, :].unsqueeze(0)

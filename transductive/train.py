@@ -27,6 +27,23 @@ parser.add_argument('--remove_1hop_edges', action='store_true')
 parser.add_argument('--fact_ratio', type=float, default=0.9)
 parser.add_argument('--epoch', type=int, default=300)
 parser.add_argument('--eval_interval', type=int, default=1)
+parser.add_argument('--use_rel_codiffusion', action='store_true')
+parser.add_argument('--rel_line_topk', type=int, default=10)
+parser.add_argument('--rel_edge_threshold', type=float, default=0.001)
+parser.add_argument('--rel_tau', type=float, default=1.0)
+parser.add_argument('--rel_residual_alpha', type=float, default=0.5)
+parser.add_argument('--rel_diff_weight', type=float, default=0.5)
+parser.add_argument('--rel_dropout', type=float, default=0.1)
+parser.add_argument('--rel_layers_per_gnn', type=int, default=1)
+parser.add_argument('--rel_include_inverse', action='store_true')
+parser.add_argument('--lr', type=float, default=None)
+parser.add_argument('--decay_rate', type=float, default=None)
+parser.add_argument('--lamb', type=float, default=None)
+parser.add_argument('--hidden_dim', type=int, default=None)
+parser.add_argument('--attn_dim', type=int, default=None)
+parser.add_argument('--dropout', type=float, default=None)
+parser.add_argument('--act', type=str, default=None, choices=['relu', 'tanh', 'idd'])
+parser.add_argument('--n_batch', type=int, default=None)
 args = parser.parse_args()
 
 if __name__ == '__main__':
@@ -125,6 +142,13 @@ if __name__ == '__main__':
         opts.n_edge_topk = -1
         opts.n_layer = opts.layers
         opts.n_batch = opts.n_tbatch = 5
+
+    for name in ['lr', 'decay_rate', 'lamb', 'hidden_dim', 'attn_dim', 'dropout', 'act']:
+        value = getattr(args, name)
+        if value is not None:
+            setattr(opts, name, value)
+    if args.n_batch is not None:
+        opts.n_batch = opts.n_tbatch = args.n_batch
     
     checkPath('./results/')
     checkPath(f'./results/{dataset}/')
