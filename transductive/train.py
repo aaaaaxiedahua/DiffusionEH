@@ -46,9 +46,11 @@ parser.add_argument('--dropout', type=float, default=None)
 parser.add_argument('--act', type=str, default=None, choices=['relu', 'tanh', 'idd'])
 parser.add_argument('--n_batch', type=int, default=None)
 args = parser.parse_args()
+CLI_OVERRIDE_NAMES = ['lr', 'decay_rate', 'lamb', 'hidden_dim', 'attn_dim', 'dropout', 'act', 'n_batch']
 
 if __name__ == '__main__':
     opts = args
+    cli_overrides = {name: getattr(args, name) for name in CLI_OVERRIDE_NAMES}
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.set_num_threads(8)
@@ -144,12 +146,13 @@ if __name__ == '__main__':
         opts.n_layer = opts.layers
         opts.n_batch = opts.n_tbatch = 5
 
-    for name in ['lr', 'decay_rate', 'lamb', 'hidden_dim', 'attn_dim', 'dropout', 'act']:
-        value = getattr(args, name)
+    for name in CLI_OVERRIDE_NAMES:
+        value = cli_overrides[name]
         if value is not None:
-            setattr(opts, name, value)
-    if args.n_batch is not None:
-        opts.n_batch = opts.n_tbatch = args.n_batch
+            if name == 'n_batch':
+                opts.n_batch = opts.n_tbatch = value
+            else:
+                setattr(opts, name, value)
     
     checkPath('./results/')
     checkPath(f'./results/{dataset}/')
