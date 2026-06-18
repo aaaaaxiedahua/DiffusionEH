@@ -6,9 +6,24 @@ import numpy as np
 from   torch_scatter import scatter
 from   collections import defaultdict
 from   relation_codiffusion import RelationCoDiffusion
+from   phase_interference import PhaseInterferenceModule
 
 class GNNLayer(torch.nn.Module):
-    def __init__(self, in_dim, out_dim, attn_dim, n_rel, n_ent, n_node_topk=-1, n_edge_topk=-1, tau=1.0, act=lambda x:x):
+    def __init__(
+        self,
+        in_dim,
+        out_dim,
+        attn_dim,
+        n_rel,
+        n_ent,
+        n_node_topk=-1,
+        n_edge_topk=-1,
+        tau=1.0,
+        act=lambda x:x,
+        use_phase_interference=False,
+        phase_tau=1.0,
+        phase_weight=0.3,
+    ):
         super(GNNLayer, self).__init__()
         self.n_rel       = n_rel
         self.n_ent       = n_ent
@@ -19,6 +34,8 @@ class GNNLayer(torch.nn.Module):
         self.n_node_topk = n_node_topk
         self.n_edge_topk = n_edge_topk
         self.tau         = tau
+        self.use_phase_interference = use_phase_interference
+        self.phase_weight = phase_weight
         self.rela_embed  = nn.Embedding(2*n_rel+1, in_dim)
         self.Ws_attn     = nn.Linear(in_dim, attn_dim, bias=False)
         self.Wr_attn     = nn.Linear(in_dim, attn_dim, bias=False)
@@ -29,6 +46,15 @@ class GNNLayer(torch.nn.Module):
         self.w_alpha     = nn.Linear(attn_dim, 1)
         self.W_h         = nn.Linear(in_dim, out_dim, bias=False)
         self.W_samp      = nn.Linear(in_dim, 1, bias=False)
+        if self.use_phase_interference:
+            self.phase_module = PhaseInterferenceModule(
+                in_dim,
+                attn_dim,
+                tau=phase_tau,
+                act=act,
+            )
+        else:
+            self.phase_module = None
         
     def train(self, mode=True):
         if not isinstance(mode, bool):
@@ -68,9 +94,14 @@ class GNNLayer(torch.nn.Module):
             
         else:
             alpha = torch.sigmoid(self.w_alpha(nn.ReLU()(self.Ws_attn(hs) + self.Wr_attn(hr) + self.Wqr_attn(h_qr)))) # 
-        message     = alpha * message
-        message_agg = scatter(message, index=obj, dim=0, dim_size=n_node, reduce='sum')
-        hidden_new  = self.act(self.W_h(message_agg)) 
+        weighted_message = alpha * message
+        message_agg = scatter(weighted_message, index=obj, dim=0, dim_size=n_node, reduce='sum')
+        hidden_real = self.act(self.W_h(message_agg))
+        if self.phase_module is not None:
+            hidden_phase = self.phase_module(hs, hr, h_qr, weighted_message, obj, n_node)
+            hidden_new = hidden_real + self.phase_weight * hidden_phase
+        else:
+            hidden_new = hidden_real
         hidden_new  = hidden_new.clone()
         
         if self.n_node_topk <= 0:
@@ -118,14 +149,31 @@ class GNNModel(torch.nn.Module):
         self.loader      = loader
         self.use_rel_codiffusion = getattr(params, 'use_rel_codiffusion', False)
         self.rel_diff_weight = getattr(params, 'rel_diff_weight', 0.5)
+        self.use_phase_interference = getattr(params, 'use_phase_interference', False)
+        self.phase_tau = getattr(params, 'phase_tau', 1.0)
+        self.phase_weight = getattr(params, 'phase_weight', 0.3)
         acts = {'relu': nn.ReLU(), 'tanh': torch.tanh, 'idd': lambda x:x}
         act  = acts[params.act]
 
         self.gnn_layers = []
         for i in range(self.n_layer):
             i_n_node_topk = self.n_node_topk if 'int' in str(type(self.n_node_topk)) else self.n_node_topk[i]
-            self.gnn_layers.append(GNNLayer(self.hidden_dim, self.hidden_dim, self.attn_dim, self.n_rel, self.n_ent, \
-                                            n_node_topk=i_n_node_topk, n_edge_topk=self.n_edge_topk, tau=params.tau, act=act))
+            self.gnn_layers.append(
+                GNNLayer(
+                    self.hidden_dim,
+                    self.hidden_dim,
+                    self.attn_dim,
+                    self.n_rel,
+                    self.n_ent,
+                    n_node_topk=i_n_node_topk,
+                    n_edge_topk=self.n_edge_topk,
+                    tau=params.tau,
+                    act=act,
+                    use_phase_interference=self.use_phase_interference,
+                    phase_tau=self.phase_tau,
+                    phase_weight=self.phase_weight,
+                )
+            )
 
         self.gnn_layers = nn.ModuleList(self.gnn_layers)       
         if self.use_rel_codiffusion:

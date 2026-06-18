@@ -2,6 +2,8 @@ import random
 import os
 import argparse
 import json
+from datetime import datetime
+from uuid import uuid4
 import torch
 import numpy as np
 from load_data import DataLoader
@@ -37,6 +39,9 @@ parser.add_argument('--rel_diff_weight', type=float, default=0.5)
 parser.add_argument('--rel_dropout', type=float, default=0.1)
 parser.add_argument('--rel_layers_per_gnn', type=int, default=1)
 parser.add_argument('--rel_include_inverse', action='store_true')
+parser.add_argument('--use_phase_interference', action='store_true')
+parser.add_argument('--phase_tau', type=float, default=1.0)
+parser.add_argument('--phase_weight', type=float, default=0.3)
 parser.add_argument('--lr', type=float, default=None)
 parser.add_argument('--decay_rate', type=float, default=None)
 parser.add_argument('--lamb', type=float, default=None)
@@ -45,8 +50,19 @@ parser.add_argument('--attn_dim', type=int, default=None)
 parser.add_argument('--dropout', type=float, default=None)
 parser.add_argument('--act', type=str, default=None, choices=['relu', 'tanh', 'idd'])
 parser.add_argument('--n_batch', type=int, default=None)
+parser.add_argument('--trial_id', type=int, default=None)
 args = parser.parse_args()
 CLI_OVERRIDE_NAMES = ['lr', 'decay_rate', 'lamb', 'hidden_dim', 'attn_dim', 'dropout', 'act', 'n_batch']
+
+
+def build_log_file(dataset, trial_id=None):
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    run_uuid = uuid4().hex[:8]
+    if trial_id is None:
+        filename = f'{dataset}_{timestamp}_{run_uuid}.log'
+    else:
+        filename = f'{dataset}_trial{trial_id}_{timestamp}_{run_uuid}.log'
+    return os.path.join('results', dataset, 'logs', filename)
 
 if __name__ == '__main__':
     opts = args
@@ -156,13 +172,17 @@ if __name__ == '__main__':
     
     checkPath('./results/')
     checkPath(f'./results/{dataset}/')
+    checkPath(f'./results/{dataset}/logs/')
     checkPath(f'{loader.task_dir}/saveModel/')
 
     model = BaseModel(opts, loader)
-    opts.perf_file = f'results/{dataset}/{model.modelName}_perf.txt'
+    opts.perf_file = build_log_file(dataset, trial_id=opts.trial_id)
     print(f'==> perf_file: {opts.perf_file}')
     
     config = {
+        'dataset': dataset,
+        'trial_id': opts.trial_id,
+        'perf_file': opts.perf_file,
         'lr': opts.lr,
         'decay_rate': opts.decay_rate,
         'lamb': opts.lamb,
@@ -177,6 +197,7 @@ if __name__ == '__main__':
         'tau': opts.tau,
         'remove_1hop_edges': opts.remove_1hop_edges,
         'use_rel_codiffusion': opts.use_rel_codiffusion,
+        'use_phase_interference': opts.use_phase_interference,
     }
     if opts.use_rel_codiffusion:
         config.update({
@@ -188,6 +209,11 @@ if __name__ == '__main__':
             'rel_dropout': opts.rel_dropout,
             'rel_layers_per_gnn': opts.rel_layers_per_gnn,
             'rel_include_inverse': opts.rel_include_inverse,
+        })
+    if opts.use_phase_interference:
+        config.update({
+            'phase_tau': opts.phase_tau,
+            'phase_weight': opts.phase_weight,
         })
     legacy_config_str = '%.4f, %.4f, %.6f,  %d, %d, %d, %d, %.4f,%s\n' % (opts.lr, opts.decay_rate, opts.lamb, opts.hidden_dim, opts.attn_dim, opts.n_layer, opts.n_batch, opts.dropout, opts.act)
     config_str = '[CONFIG] ' + json.dumps(config, sort_keys=True) + '\n'
@@ -224,4 +250,6 @@ if __name__ == '__main__':
     if opts.eval:
         result_dict, out_str = model.evaluate(eval_val=False, eval_test=True, verbose=True)
         print(result_dict, '\n', out_str)
+        with open(opts.perf_file, 'a+') as f:
+            f.write(out_str)
         

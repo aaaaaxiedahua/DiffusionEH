@@ -106,7 +106,7 @@ DATASET_SEARCH_SPACE = {
         "layers": [6, 7, 8],
         "fact_ratio": (0.85, 0.95),
         "hidden_dim": [32, 48, 64],
-        "attn_dim": [3, 5, 8, 16],
+        "attn_dim": [3, 5, 8],
         "n_batch": [10, 20, 50],
         "act": ["relu", "tanh", "idd"],
         "lr": (1e-3, 6e-3),
@@ -128,11 +128,11 @@ DATASET_SEARCH_SPACE = {
         "dropout": (0.0, 0.2),
     },
     "WN18RR": {
-        "topk": [500, 1000, 1500, 2000],
-        "layers": [6, 7, 8],
+        "topk": [800, 1000, 1200],
+        "layers": [4, 5, 6, 7, 8],
         "fact_ratio": (0.93, 0.98),
-        "hidden_dim": [48, 64, 96, 128],
-        "attn_dim": [3, 5, 8, 16],
+        "hidden_dim": [48, 64, 96],
+        "attn_dim": [3, 5, 8],
         "n_batch": [20, 50],
         "act": ["relu", "tanh", "idd"],
         "lr": (1e-3, 6e-3),
@@ -141,11 +141,11 @@ DATASET_SEARCH_SPACE = {
         "dropout": (0.0, 0.2),
     },
     "fb15k-237": {
-        "topk": [1000, 1500, 2000, 2500],
+        "topk": [1000, 1500, 2000],
         "layers": [5, 6, 7, 8],
         "fact_ratio": (0.97, 0.995),
-        "hidden_dim": [32, 48, 64, 96],
-        "attn_dim": [3, 5, 8, 16],
+        "hidden_dim": [32, 48, 64],
+        "attn_dim": [3, 5, 8],
         "n_batch": [4, 6, 8, 10],
         "act": ["relu", "tanh", "idd"],
         "lr": (3e-4, 3e-3),
@@ -154,8 +154,8 @@ DATASET_SEARCH_SPACE = {
         "dropout": (0.0, 0.2),
     },
     "nell": {
-        "topk": [1000, 1500, 2000, 2500],
-        "layers": [5, 6, 7],
+        "topk": [1000, 1500, 2000],
+        "layers": [5, 6, 7, 8],
         "fact_ratio": (0.90, 0.98),
         "hidden_dim": [64, 96, 128],
         "attn_dim": [16, 32, 64],
@@ -198,9 +198,7 @@ def suggest_original_params(trial, dataset):
         "layers": trial.suggest_categorical("layers", unique_sorted(space["layers"])),
         "fact_ratio": trial.suggest_float("fact_ratio", fact_ratio_low, fact_ratio_high),
         "tau": trial.suggest_categorical("tau", [0.5, 1.0, 2.0]),
-        "remove_1hop_edges": trial.suggest_categorical(
-            "remove_1hop_edges", [True, False]
-        ),
+        "remove_1hop_edges": False,
         "lr": trial.suggest_float("lr", lr_low, lr_high, log=True),
         "decay_rate": trial.suggest_float("decay_rate", decay_low, decay_high),
         "lamb": trial.suggest_float("lamb", lamb_low, lamb_high, log=True),
@@ -251,16 +249,27 @@ def suggest_relation_codiffusion_params(trial):
     }
 
 
+def suggest_phase_interference_params(trial):
+    """Phase-interference search space."""
+    return {
+        "phase_tau": trial.suggest_categorical("phase_tau", [0.5, 1.0, 2.0]),
+        "phase_weight": trial.suggest_categorical("phase_weight", [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]),
+    }
+
+
 def dataset_name(data_path):
     return Path(data_path.rstrip("/\\")).name
 
 
-def suggest_params(trial, dataset, enable_rel_search):
+def suggest_params(trial, dataset, enable_rel_search, enable_phase_search):
     params = suggest_original_params(trial, dataset)
 
     if enable_rel_search:
         params["use_rel_codiffusion"] = True
         params.update(suggest_relation_codiffusion_params(trial))
+    if enable_phase_search:
+        params["use_phase_interference"] = True
+        params.update(suggest_phase_interference_params(trial))
 
     return params
 
@@ -285,6 +294,8 @@ def build_command(args, params):
         str(args.max_epoch),
         "--eval_interval",
         str(args.eval_interval),
+        "--trial_id",
+        str(args.current_trial_id),
     ]
 
     for key, value in params.items():
@@ -478,7 +489,8 @@ def make_objective(args):
     cwd = str(Path(args.workdir).resolve())
 
     def objective(trial):
-        params = suggest_params(trial, dataset, args.enable_rel_search)
+        args.current_trial_id = trial.number
+        params = suggest_params(trial, dataset, args.enable_rel_search, args.enable_phase_search)
         trial.set_user_attr("dataset", dataset)
         trial.set_user_attr("params", json.dumps(params, sort_keys=True))
         cmd = build_command(args, params)
@@ -510,6 +522,7 @@ def parse_args():
     parser.add_argument("--train_script", type=str, default="train.py")
     parser.add_argument("--workdir", type=str, default=".")
     parser.add_argument("--enable_rel_search", action="store_true")
+    parser.add_argument("--enable_phase_search", action="store_true")
     parser.add_argument("--initial_params", type=str, default=None)
     parser.add_argument(
         "--enqueue_json",
@@ -528,6 +541,7 @@ def parse_args():
 
 def main():
     args = parse_args()
+    args.current_trial_id = -1
     dataset = dataset_name(args.data_path)
     study_name = args.study_name or f"diffusione_{dataset}"
 
