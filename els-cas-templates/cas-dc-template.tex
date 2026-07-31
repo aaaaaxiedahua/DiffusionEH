@@ -50,13 +50,13 @@
 \def\textpagefraction{.001}
 
 % Short title
-\shorttitle{Knowledge Graph Reasoning with Relation Co-Diffusion}    
+\shorttitle{Relation--Phase Evidence Evolution for Knowledge Graph Reasoning}
 
 % Short author
 \shortauthors{Author et al.}  
 
 % Main title of the paper
-\title [mode = title]{Knowledge Graph Reasoning with Relation Co-Diffusion and Phase-Interference Message Aggregation}  
+\title [mode = title]{RPCD-GNN: A Query-Conditioned Relation--Phase Evidence Evolution Framework for Knowledge Graph Reasoning}
 
 % Title footnote mark
 % eg: \tnotemark[1]
@@ -142,7 +142,8 @@
 
 % Here goes the abstract
 \begin{abstract}
-Knowledge graph reasoning aims to infer missing or implicit facts from observed relational structures. Although diffusion-based graph neural networks have shown promising performance in multi-hop reasoning, most existing methods mainly perform message diffusion in the entity space, while relation-level dependencies and interactions among path evidence are insufficiently modeled. In this paper, we propose RPCD-GNN, which formulates knowledge graph reasoning as a query-conditioned relation-phase evidence diffusion process. Rather than treating relation modeling, entity propagation, and evidence aggregation as separate operations, RPCD-GNN establishes a continuous reasoning process in which query-specific relational context jointly determines the semantic content, propagation strength, and interaction phase of each reasoning message. Specifically, relation co-occurrence structures are transformed into query-adaptive relational context, under which evidence is propagated from the query entity and encoded with relation-guided content, relevance, and phase. The encoded evidence then interacts through real, imaginary, and amplitude-aware aggregation to drive multi-layer entity-state evolution and answer prediction. Experimental results on benchmark knowledge graph reasoning datasets demonstrate that RPCD-GNN achieves competitive or superior performance compared with representative embedding-based, path-based, and GNN-based methods. Further analyses verify the effectiveness and interpretability of the proposed reasoning process.
+Knowledge graph reasoning infers missing facts by aggregating query-relevant evidence over relational structures. Existing diffusion-based graph neural networks mainly optimize where entity states are propagated, but insufficiently model how query-specific relation dependencies shape individual evidence and how multiple paths interact when converging on the same candidate. We propose the relation--phase co-diffusion graph neural network (RPCD-GNN), a unified evidence-evolution framework for multi-hop reasoning. RPCD-GNN distills recurring local relation co-occurrence patterns into a reusable dependency graph and dynamically activates this structure for each query to induce a shared relational controller. The controller jointly governs the semantic content, propagation relevance, and interaction phase of relation-guided evidence. Direct and phase-coherent evidence moments are integrated to preserve accumulated support while characterizing agreement and conflict among convergent paths, thereby recurrently evolving candidate states across reasoning layers. Together, these operations couple relational context induction, evidence formation, and cross-evidence interaction within a single end-to-end reasoning process. Experiments on five transductive benchmarks compare RPCD-GNN with strong reasoning baselines, while coupling-aware ablations and efficiency analyses assess the contribution and computational trade-offs of relation--phase coupling.
+% TODO: After completing all experiments, replace the final sentence above with the main quantitative result and one ablation or efficiency conclusion.
 \end{abstract}
 
 % Use if graphical abstract is present
@@ -152,9 +153,9 @@ Knowledge graph reasoning aims to infer missing or implicit facts from observed 
 
 % Research highlights
 \begin{highlights}
-\item A query-conditioned relation-phase evidence diffusion framework is proposed for knowledge graph reasoning.
-\item Dynamic relational context jointly controls message content, propagation strength, and interaction phase.
-\item Interference-aware evidence aggregation drives multi-layer entity-state evolution for answer prediction.
+\item Entity-centric diffusion is extended into query-conditioned relation--phase evidence evolution.
+\item A shared relational controller jointly determines evidence content, relevance, and interaction phase.
+\item Direct and phase-coherent evidence moments drive recurrent multi-hop candidate-state evolution.
 \end{highlights}
 
 
@@ -163,7 +164,7 @@ Knowledge graph reasoning aims to infer missing or implicit facts from observed 
 % Keywords
 % Each keyword is separated by \sep
 \begin{keywords}
-Knowledge graph reasoning \sep Graph neural networks \sep Relation co-diffusion \sep Phase-interference message aggregation
+Knowledge graph reasoning \sep Graph neural networks \sep Relation--phase evidence evolution \sep Query-adaptive relational context
 \end{keywords}
 
 \maketitle
@@ -173,218 +174,254 @@ Knowledge graph reasoning \sep Graph neural networks \sep Relation co-diffusion 
 
 Knowledge graphs (KGs) represent real-world facts in the form of relational triples, where entities are connected by semantic relations. Since real-world KGs are usually incomplete, knowledge graph reasoning aims to infer missing or implicit facts from observed graph structures and relation semantics. A typical reasoning query can be formulated as $(h_q,r_q,?)$, where the model is expected to predict the answer entity according to the query entity $h_q$, the query relation $r_q$, and the surrounding evidence in the KG. The key challenge of this task lies not only in reaching candidate entities through multi-hop structures, but also in identifying useful relation compositions and reliable path evidence under a specific query. Accordingly, knowledge graph reasoning plays an important role in many knowledge-driven applications, such as question answering, recommender systems, and drug discovery \citep{Ji2022Survey,Cao2019KGRec,Zeng2022DrugDiscovery}.
 
-Existing knowledge graph reasoning methods can be roughly divided into embedding-based methods, path-based methods, and graph neural network (GNN)-based methods. Embedding-based methods, such as TransE, DistMult, ComplEx, RotatE, TuckER, and ConvE, learn low-dimensional representations of entities and relations and predict missing facts through scoring functions \citep{Bordes2013TransE,Yang2015DistMult,Trouillon2016ComplEx,Sun2019RotatE,Balazevic2019TuckER,Dettmers2018ConvE}. These methods are efficient and effective for triple-level scoring, but they are limited in exploiting multi-hop structural evidence. Path-based methods reason over relational paths or logical rules, providing interpretable evidence for prediction \citep{Lin2015PTransE,Das2017PathRNN,Xiong2017DeepPath,Sadeghian2019DRUM}. However, they often rely on path search or sequential rule modeling, which may restrict their ability to capture complex subgraph-level patterns.
+Existing approaches broadly fall into embedding-based, path- or rule-based, and graph neural network (GNN)-based paradigms. Embedding methods learn compact triple-level scoring functions, whereas path- and rule-based methods derive predictions from explicit relational compositions \citep{Bordes2013TransE,Trouillon2016ComplEx,Sun2019RotatE,Xiong2017DeepPath,Sadeghian2019DRUM}. Although embedding methods are efficient and explicit paths provide interpretable evidence, neither paradigm directly supports adaptive multi-layer propagation over query-relevant subgraph structures. This motivates GNN-based reasoners, which propagate query-dependent states over relational neighborhoods to support multi-hop inference.
 
-GNN-based methods have recently attracted increasing attention because they can perform message passing over graph structures and incorporate neighborhood information into entity representations \citep{Schlichtkrull2018RGCN,Vashishth2020CompGCN,Nathani2019KBGAT}. To better support multi-hop reasoning, NBFNet models link prediction from a path-based dynamic programming perspective, while RED-GNN dynamically constructs query-dependent relational subgraphs for reasoning \citep{Zhu2021NBFNet,Zhang2022REDGNN}. DiffusionE further formulates message propagation in KG reasoning as a diffusion process and introduces semantic-dependent propagation to improve reasoning effectiveness \citep{Cao2024DiffusionE}. In addition, recent studies have explored GNN-based reasoning with dynamic message passing and relation-aware representation learning \citep{Liu2025TopPReasoning,Yin2024DRGNN}. These studies indicate that diffusion-based propagation is a promising paradigm for multi-hop KG reasoning.
+Recent GNN-based reasoners increasingly organize multi-hop inference as query-centered progressive propagation. NBFNet formulates link prediction through generalized Bellman--Ford reasoning, RED-GNN progressively constructs query-dependent relational subgraphs, and AdaProp learns query-adaptive propagation structures \citep{Zhu2021NBFNet,Zhang2022REDGNN,Zhang2023AdaProp}. DiffusionE further reformulates entity-state propagation as a semantics-guided diffusion process, while Top-p reasoning dynamically controls the layer-wise propagation range \citep{Cao2024DiffusionE,Liu2025TopPReasoning}. Building on the progressive entity-reasoning paradigm exemplified by DiffusionE, RPCD-GNN investigates how relation-level structural context and cross-evidence interaction can be embedded into each layer of entity-state evolution.
 
-Despite these advances, existing diffusion-based GNN reasoning methods still mainly formulate reasoning as entity-level message diffusion. First, relations are often used as static edge labels or local transformation factors, while high-order relation dependencies and query-specific relation compositions are not explicitly modeled during diffusion. In multi-hop reasoning, however, relation combinations provide crucial semantic clues, and the usefulness of a relation may vary under different query relations. Second, real-valued weighted summation treats multi-path messages as independent additive evidence, making it difficult to distinguish supportive, conflicting, and noisy reasoning paths. These two limitations are closely coupled: without query-specific relational context, the semantic content and relevance of propagated evidence cannot adapt sufficiently to the current query; without interaction-aware evidence modeling, relation-guided messages are still accumulated independently. This motivates a unified reasoning process that connects relational context formation, evidence encoding, and entity-state evolution.
+Despite these advances, progressive GNN reasoning remains largely entity-centric. First, relation representations are commonly consumed as local edge transformations, but their reusable structural dependencies are rarely converted into a query-relation-conditioned context that consistently governs evidence formation across reasoning layers. Second, convergent messages are typically collapsed through weighted summation, which measures individual relevance but does not explicitly characterize agreement or conflict among evidence items reaching the same candidate. These limitations are closely coupled: relational context determines what constitutes query-relevant evidence, whereas interaction modeling determines how such evidence should be combined during state evolution. This motivates a unified reasoning process that connects relational context formation, evidence encoding, and entity-state evolution.
 
-To address the above problems, we propose RPCD-GNN, a relation-phase co-diffusion graph neural network that models knowledge graph reasoning as a query-conditioned relation-phase evidence diffusion process. Given a query, RPCD-GNN first induces a query-specific relational context from relation co-occurrence dependencies. This relational context is not used merely as an initial relation enhancement; it governs the formation of reasoning evidence by jointly conditioning message content, propagation strength, and interaction phase. Each relation-guided message is consequently represented as relation-phase evidence, and multiple incoming pieces of evidence interact through their real, imaginary, and amplitude components. The resulting interference-aware evidence summary drives multi-layer entity-state evolution from the query entity to candidate answers. In this way, relational context formation, evidence propagation, and path interaction constitute a continuous end-to-end reasoning process rather than separate model components.
+To address these problems, we propose RPCD-GNN, a relation--phase co-diffusion graph neural network that formulates multi-hop reasoning as query-conditioned evidence evolution. Given a query $q=(h_q,r_q)$, the query relation $r_q$ dynamically activates a structural dependency graph distilled from recurring local relation co-occurrence patterns, inducing a relational context that conditions evidence content, propagation relevance, and interaction phase. Meanwhile, the query entity $h_q$ initializes progressive entity-state propagation. Direct evidence moments preserve accumulated support, whereas phase-coherent moments characterize agreement and conflict among convergent evidence. Their integrated representation recurrently evolves candidate states across reasoning layers, coupling relational context induction, evidence formation, and cross-evidence interaction within a single end-to-end process.
 
 The main contributions of this paper are summarized as follows:
 \begin{itemize}
-\item We formulate knowledge graph reasoning as a query-conditioned relation-phase evidence diffusion process, in which relational context formation, evidence propagation, and entity-state evolution are jointly modeled within RPCD-GNN.
-\item We develop a query-adaptive relational context that captures high-order relation dependencies and jointly governs the semantic content, propagation strength, and interaction phase of reasoning evidence.
-\item We introduce an interference-aware state evolution mechanism that aggregates the real, imaginary, and amplitude components of multi-source evidence to characterize supportive, conflicting, and noisy interactions during multi-hop reasoning.
-\item Extensive experiments on benchmark knowledge graph reasoning datasets demonstrate the effectiveness of RPCD-GNN, and further analyses verify the contribution of the proposed reasoning process.
+\item We formulate knowledge graph reasoning as a query-conditioned relation--phase evidence evolution process, in which relational context induction, evidence propagation, and entity-state evolution are jointly modeled within RPCD-GNN.
+\item We develop a query-relation-conditioned context induction mechanism that transforms reusable structural dependencies among relations into a shared semantic controller of evidence content, propagation relevance, and interaction phase.
+\item We design a phase-coherent evidence interaction mechanism that integrates direct and coherent moments to preserve accumulated support and characterize agreement and conflict among convergent reasoning paths.
 \end{itemize}
 
 \section{Related Work}\label{sec:related-work}
 
-\subsection{Embedding-based Knowledge Graph Reasoning}\label{subsec:embedding-based-reasoning}
+\subsection{Embedding- and Path-based Knowledge Graph Reasoning}\label{subsec:embedding-path-reasoning}
 
-Embedding-based methods aim to represent entities and relations in continuous vector spaces and evaluate the plausibility of candidate triples through scoring functions. Translational models, such as TransE and TransR, interpret relations as transformations between head and tail entities in embedding spaces \citep{Bordes2013TransE,Lin2015TransR}. Tensor decomposition and semantic matching models, including RESCAL, DistMult, ComplEx, and TuckER, capture relational patterns through bilinear or tensor-based scoring functions \citep{Nickel2011RESCAL,Yang2015DistMult,Trouillon2016ComplEx,Balazevic2019TuckER}. To improve the modeling of complex relation patterns, RotatE and QuatE introduce complex-valued or hypercomplex representations for relation modeling \citep{Sun2019RotatE,Zhang2019QuatE}. Neural network-based methods, such as ConvE and InteractE, further enhance feature interactions with convolutional architectures \citep{Dettmers2018ConvE,Vashishth2020InteractE}. Although these methods can model various relation patterns in the embedding space, they mainly focus on triple-level scoring and do not explicitly exploit query-specific multi-hop relation dependencies.
+Embedding-based methods represent entities and relations in continuous spaces and evaluate candidate triples through parameterized scoring functions. Translational models, represented by TransE and TransR, model relations as transformations between entity embeddings, whereas semantic matching methods such as DistMult and TuckER capture relational compatibility through bilinear or tensor operations \citep{Bordes2013TransE,Lin2015TransR,Yang2015DistMult,Balazevic2019TuckER}. Neural scoring models, including ConvE and InteractE, further enhance feature interactions with convolutional architectures \citep{Dettmers2018ConvE,Vashishth2020InteractE}. These methods provide efficient triple-level prediction but do not explicitly expose the multi-hop evidence supporting a candidate answer.
 
-\subsection{Path-based Knowledge Graph Reasoning}\label{subsec:path-based-reasoning}
+Path- and rule-based methods instead derive predictions from explicit relational compositions. PTransE incorporates relation paths into representation learning, while Path-RNN, DeepPath, and MINERVA model reasoning as sequential path encoding or policy-guided search \citep{Lin2015PTransE,Das2017PathRNN,Xiong2017DeepPath,Das2018MINERVA}. DRUM learns differentiable logical rules, and PathCon captures relational path contexts through message passing \citep{Sadeghian2019DRUM,Wang2021PathCon}. A*Net further improves the scalability of path-based reasoning by learning a priority function that selects important nodes and edges during search \citep{Zhu2023AStarNet}. These methods reveal explicit relation compositions, but their primary objective lies in path discovery, path selection, or rule induction rather than modeling how multiple pieces of evidence interact after converging on the same candidate.
 
-Path-based methods utilize relational paths or logical rules as reasoning evidence. PTransE incorporates multi-hop relation paths into representation learning, while Path-RNN and DeepPath model reasoning paths with recurrent networks or reinforcement learning \citep{Lin2015PTransE,Das2017PathRNN,Xiong2017DeepPath}. MINERVA formulates knowledge graph reasoning as a sequential decision process and searches answer paths through reinforcement learning \citep{Das2018MINERVA}. DRUM learns differentiable logical rules for reasoning, and PathCon models relational paths with message passing over path structures \citep{Sadeghian2019DRUM,Wang2021PathCon}. Although these methods provide interpretable path-level evidence, they often rely on explicit path search, rule mining, or sequential decision making, which may lead to high computational costs and limited flexibility in complex subgraphs. In addition, they usually emphasize path discovery or rule learning, while the interactions among multiple evidence paths are less explicitly modeled.
+\subsection{Progressive GNN-based Knowledge Graph Reasoning}\label{subsec:progressive-gnn-reasoning}
 
-\subsection{GNN-based Knowledge Graph Reasoning}\label{subsec:gnn-based-reasoning}
+Relational GNNs provide the structural basis for multi-hop knowledge graph reasoning. R-GCN applies relation-specific transformations during neighborhood aggregation, while CompGCN jointly composes entity and relation representations \citep{Schlichtkrull2018RGCN,Vashishth2020CompGCN}. More recent reasoners organize inference around a query-centered propagation process. NBFNet formulates link prediction through generalized Bellman--Ford reasoning, RED-GNN progressively constructs query-dependent relational subgraphs, and AdaProp learns query-adaptive propagation structures \citep{Zhu2021NBFNet,Zhang2022REDGNN,Zhang2023AdaProp}. DiffusionE further reformulates progressive entity-state propagation as a semantics-guided diffusion process, whereas Top-p reasoning dynamically controls the layer-wise propagation range \citep{Cao2024DiffusionE,Liu2025TopPReasoning}.
 
-GNN-based methods perform message passing over graph structures and have become an important direction for knowledge graph reasoning. R-GCN introduces relation-specific transformations for relational graphs, while CompGCN jointly composes entity and relation embeddings during graph convolution \citep{Schlichtkrull2018RGCN,Vashishth2020CompGCN}. Attention-based methods, such as GAT and KBGAT, assign different importance weights to neighboring entities and relations during aggregation \citep{Velickovic2018GAT,Nathani2019KBGAT}. VR-GCN further considers both relation types and directions for neighbor aggregation \citep{Ye2019VRGCN}. For multi-hop reasoning, NBFNet models link prediction from a generalized Bellman-Ford perspective, and RED-GNN dynamically constructs query-dependent relational subgraphs \citep{Zhu2021NBFNet,Zhang2022REDGNN}. DiffusionE reformulates message propagation as a diffusion process to improve semantic consistency in reasoning \citep{Cao2024DiffusionE}. Recent studies further explore dynamic message passing, neighborhood-aware attention, and relation-aware representation learning for knowledge graph reasoning \citep{Liu2025TopPReasoning,Wu2023NAKGR,Yin2024DRGNN}. Despite their progress, most existing GNN-based methods mainly perform propagation in the entity space, while relation-level dependencies and multi-path evidence interactions are still insufficiently explored. In contrast to these methods, RPCD-GNN establishes a query-conditioned relation-phase evidence diffusion process in which relational context controls evidence formation and interference-aware interactions drive entity-state evolution.
+Beyond conventional GNN aggregation, KnowFormer revisits knowledge graph reasoning through structure-aware Transformer attention to alleviate missing paths and information over-squashing \citep{Liu2024KnowFormer}. Although these methods differ in architecture, their central design axes lie in organizing query-centered propagation structures, selecting reasoning frontiers, or extending the effective receptive field. DiffusionE is the closest predecessor of RPCD-GNN: RPCD-GNN inherits its progressive entity-reasoning paradigm but redefines each layer as relation--phase evidence evolution, focusing on how relational context shapes individual evidence and how convergent evidence interacts during state evolution.
+
+\subsection{Relation-centric Structural Modeling}\label{subsec:relation-centric-modeling}
+
+A complementary line of research explicitly models relation-level semantics and structural dependencies. DRGCL uses relations to guide disentangled entity representation learning under different semantic factors \citep{Yin2024DRGNN}. ConGLR couples an entity subgraph with a context graph for inductive relation prediction, while RMPI performs message passing over a relation view to support inductive reasoning \citep{Lin2022ConGLR,Geng2023RMPI}. InGram constructs entity- and relation-level structures to generalize to unseen entities and relations, and ULTRA represents relation interactions as a transferable structure for zero-shot reasoning \citep{Lee2023InGram,Galkin2024ULTRA}.
+
+These studies demonstrate the value of reusable relation structures, but they primarily target inductive or zero-shot generalization. RPCD-GNN instead studies static transductive reasoning. Its relation dependency graph is distilled from recurring local relation co-occurrence patterns and shared across queries, while the query relation dynamically activates this structure at each reasoning layer. The resulting relation states do not form an independent prediction branch; they condition evidence content, propagation relevance, and interaction phase inside progressive entity-state evolution.
+
+\subsection{Complex-valued Representations and Evidence Interaction}\label{subsec:complex-evidence-interaction}
+
+Complex-valued knowledge graph embeddings introduce geometric structures beyond real-valued vector spaces. ComplEx employs complex bilinear interactions to model asymmetric relations, RotatE represents relations as rotations in the complex plane, and QuatE uses quaternion transformations to capture richer relational patterns \citep{Trouillon2016ComplEx,Sun2019RotatE,Zhang2019QuatE}. In these models, complex components or phases primarily define the scoring geometry of entity--relation triples.
+
+Attention-based GNNs, including GAT and KBGAT, assign relevance weights to neighboring messages before additive aggregation \citep{Velickovic2018GAT,Nathani2019KBGAT}. Such mechanisms improve the selection of individual messages but do not explicitly parameterize agreement or conflict among multiple evidence items reaching the same candidate. In contrast to both static complex-valued scoring and conventional attention aggregation, RPCD-GNN assigns an interaction phase to each relation-guided evidence item according to the source state, query-relation-conditioned context, and query relation. Direct and phase-coherent moments are then integrated during layer-wise state evolution, so relative phase acts as an interaction coordinate among convergent evidence rather than as a static embedding geometry.
 
 \section{Methodology}\label{sec:methodology}
 
-\subsection{Problem Formulation and Notations}\label{subsec:problem-formulation}
+\subsection{Problem Formulation and Notation}\label{subsec:problem-formulation}
 
-Let $\mathcal{G}=(\mathcal{E},\mathcal{R},\mathcal{T})$ denote a knowledge graph, where $\mathcal{E}$ is the entity set, $\mathcal{R}$ is the relation set, and $\mathcal{T}$ is the observed triple set. Each triple $(h,r,t)\in\mathcal{T}$ represents a relational fact from the head entity $h$ to the tail entity $t$ through relation $r$. Given a reasoning query $(h_q,r_q,?)$, the goal of knowledge graph reasoning is to rank all candidate entities and identify the answer entity:
+Let $\mathcal{G}_{g}=(\mathcal{E},\mathcal{R},\mathcal{T}_{g})$ denote the observed fact graph available for reasoning, where $\mathcal{E}$, $\mathcal{R}$, and $\mathcal{T}_{g}$ are the entity set, relation set, and observed triple set, respectively. Each triple $(h,r,t)\in\mathcal{T}_{g}$ states that head entity $h$ is connected to tail entity $t$ by relation $r$. Given a query pair $q=(h_q,r_q)$ corresponding to the incomplete triple $(h_q,r_q,?)$, the task is to score all candidate entities and return
 \begin{equation}
-\hat{t}=\arg\max_{e\in\mathcal{E}} score(h_q,r_q,e),
+\hat{t}
+=
+\arg\max_{e\in\mathcal{E}}
+score(h_q,r_q,e).
+\label{eq:reasoning-task}
 \end{equation}
-where $score(h_q,r_q,e)$ measures the plausibility that $e$ is the answer entity under the query relation $r_q$.
 
-RPCD-GNN formulates knowledge graph reasoning as a continuous query-conditioned relation-phase evidence diffusion process. The process begins by inducing relational context from a relation dependency graph $\mathcal{G}_r=(\mathcal{R}',\mathcal{E}_r)$, where $\mathcal{R}'$ contains original relations, inverse relations, and the identity relation. The transition probability $p(r_j|r_i)$ describes the dependency strength from relation $r_i$ to relation $r_j$. For each relation $r_i$, $\mathbf{r}_i$, $\mathbf{r}^{dyn}_i$, and $\tilde{\mathbf{r}}_i$ denote its base embedding, query-adaptive dynamic embedding, and fused embedding, respectively. The fused relation state serves as the relational context that governs subsequent evidence formation and interaction.
+The main notation used in the model is summarized in Table~\ref{tbl:notations}. The construction of $\mathcal{T}_{g}$ under the training, validation, and test protocols is specified in Section~\ref{subsec:implementation-details}.
 
-The reasoning recursion starts from the query entity $h_q$, and the initial entity set is defined as $\mathcal{V}^{(0)}=\{h_q\}$. At the $l$-th diffusion layer, $\mathcal{V}^{(l)}$ denotes the set of reached entities, and $\mathbf{h}_v^{(l)}$ denotes the representation of entity $v$. For an edge $(u,r,v)$ involved in propagation, $\mathbf{m}_{u,r,v}^{(l)}$ denotes the evidence content transmitted from entity $u$ to entity $v$ through relation $r$. Its propagation weight and learnable phase $\theta_{u,r,v}^{(l)}$ are conditioned on the same relational context. The resulting relation-phase evidence is decomposed into real and imaginary components, whose interactions determine the updated state of each reached entity. The main notations used in this paper are summarized in Table~\ref{tbl:notations}.
-
-\begin{table}[width=\linewidth,cols=2,pos=h]
-\caption{Definitions of main notations.}\label{tbl:notations}
-\begin{tabular*}{\tblwidth}{@{}LL@{}}
+\begin{table*}[width=\FullWidth,cols=2,pos=t]
+\caption{Definitions of the main notations.}\label{tbl:notations}
+\begin{tabular*}{\tblwidth}{@{}p{0.38\FullWidth}@{\hspace{0.02\FullWidth}}p{0.60\FullWidth}@{}}
 \toprule
 Notation & Definition \\
 \midrule
-$\mathcal{G}$ & Knowledge graph \\
-$\mathcal{E}$ & Entity set \\
-$\mathcal{R}$ & Relation set \\
-$\mathcal{T}$ & Observed triple set \\
-$(h_q,r_q,?)$ & Reasoning query \\
-$\mathcal{V}^{(l)}$ & Entity set reached at layer $l$ \\
-$\mathbf{h}_v^{(l)}$ & Representation of entity $v$ at layer $l$ \\
-$\mathcal{G}_r$ & Relation dependency graph \\
-$p(r_j|r_i)$ & Transition probability from $r_i$ to $r_j$ \\
-$\mathbf{r}_i$ & Base embedding of relation $r_i$ \\
-$\mathbf{r}^{dyn}_i$ & Dynamic embedding of relation $r_i$ \\
-$\tilde{\mathbf{r}}_i$ & Fused embedding of relation $r_i$ \\
-$\widetilde{\mathbf{R}}^{(l,q)}$ & Query-conditioned relation context at layer $l$ \\
-$\mathbf{m}_{u,r,v}^{(l)}$ & Message from $u$ to $v$ through $r$ at layer $l$ \\
-$\mathbf{x}_{u,r,v}^{(l)}$ & Weighted evidence on edge $(u,r,v)$ \\
-$\mathbf{z}_{u,r,v}^{(l)}$ & Complex relation-phase evidence on edge $(u,r,v)$ \\
-$\bar{\mathbf{h}}_v^{(l)}$ & Evidence summary before recurrent state update \\
-$\alpha_{ij}$ & Query-aware relation diffusion weight \\
-$\gamma_{u,r,v}^{(l)}$ & Attention weight of a path message \\
-$\theta_{u,r,v}^{(l)}$ & Learnable phase of a path message \\
-$\lambda$ & Weight of relation co-diffusion fusion \\
-$\beta$ & Residual weight of base relation embedding \\
-$\tau_r$ & Temperature for relation diffusion \\
-$\tau_p$ & Temperature for phase assignment \\
-$\eta$ & Weight of interference-aware evidence summary \\
+$\mathcal{G}_{g},\mathcal{E},\mathcal{R},\mathcal{T}_{g}$ & Observed reasoning graph, entities, relations, and available facts \\
+$\mathcal{R}'$ & Effective relation vocabulary with inverse and identity relations \\
+$q=(h_q,r_q)$ & Query entity--relation pair \\
+$\mathcal{V}^{(l)},\overline{\mathcal{V}}^{(l)},\mathcal{C}^{(l)},\mathcal{E}^{(l)},\mathcal{E}_{v}^{(l)}$ & Retained and provisional entities, new candidates, expanded edges, and incoming edges of $v$ \\
+$\mathbf{h}_{v}^{(l,q)},\widehat{\mathbf{h}}_{v}^{(l,q)}$ & Recurrent entity state and provisional evidence state \\
+$\mathcal{G}_{r}=(\mathcal{R}',\mathcal{E}_{r})$ & Sparse relation dependency graph \\
+$\mathcal{A}_{e},n_e(r)$ & Direction-aware relation incidences at $e$ and their multiplicities \\
+$C_{ij},\bar{\pi}_{ij},\omega_{ij}$ & Relation co-occurrence count, normalized association, and final edge weight \\
+$\mathbf{r}_{i}^{(l)},\mathbf{r}_{i}^{(l,s,q)},\tilde{\mathbf{r}}_{i}^{(l,q)}$ & Base, query-conditioned intermediate, and fused relation states \\
+$\mathcal{X}_{v}^{(l,q)},\mathbf{m}_{u,r,v}^{(l,q)},\gamma_{u,r,v}^{(l,q)},\mathbf{x}_{u,r,v}^{(l,q)}$ & Incoming evidence set, semantic message, admission gate, and admitted evidence \\
+$\theta_{u,r,v}^{(l,q)},\mathbf{z}_{u,r,v}^{(l,q)}$ & Evidence phase and complex relation--phase evidence \\
+$\boldsymbol{\mu}_{v}^{(l,q)},\boldsymbol{\kappa}_{v}^{(l,q)},\boldsymbol{\rho}_{v}^{(l,q)}$ & Direct, phase-coherent, and coherent-amplitude evidence moments \\
+$L,J$ & Entity reasoning layers and inner relation-propagation steps \\
+$K_r,\delta_r,K_l$ & Relation-neighbor budget, relation threshold, and frontier budget \\
+$\lambda,\beta,\eta$ & Relation fusion, relation residual, and coherent-moment weights \\
+$\tau_r,\tau_p,\tau_s$ & Relation, phase, and candidate-selection temperatures \\
 \bottomrule
 \end{tabular*}
-\end{table}
+\end{table*}
 
-\subsection{Overall Framework of RPCD-GNN}\label{subsec:overall-framework}
+\subsection{Query-Conditioned Relation--Phase Evidence Evolution}\label{subsec:overall-framework}
 
-Given a query $(h_q,r_q,?)$, RPCD-GNN performs an $L$-layer query-conditioned relation-phase evidence diffusion process to rank candidate answer entities. The model maintains both layer-specific entity states and a query-adaptive relational context. At each reasoning layer, the shared relation dependency graph is activated by the query relation and the current relation representations, producing dynamic relation representations for subsequent entity-level reasoning.
+For a query $q=(h_q,r_q)$, the query entity $h_q$ initializes the progressive entity frontier, whereas the query relation $r_q$ conditions relational context induction. RPCD-GNN then performs an $L$-layer relation--phase evidence evolution process. At layer $l$, $\mathbf{h}_{v}^{(l,q)}$ denotes the query-dependent state of entity $v$, and $\widetilde{\mathbf{R}}^{(l,q)}$ denotes the relational context activated by $r_q$.
 
-Starting from the query entity $h_q$, the reached entity set is progressively expanded toward multi-hop candidate answers. For each involved edge, the dynamic relation representation jointly determines the semantic content, propagation weight, and phase of the transmitted evidence. The incoming evidence of each entity is summarized through direct relation-guided aggregation and phase-interference aggregation. The two evidence summaries are then integrated to update the entity state, which is recurrently propagated to the next reasoning layer.
+Each reasoning layer contains three causally connected stages. First, the query relation activates a reusable relation dependency structure to produce query-conditioned relational context. Second, this shared context jointly determines the semantic content, propagation relevance, and interaction phase of every edge-level evidence item. Third, direct and phase-coherent moments derived from the same incoming evidence set are integrated by a unified evidence operator to update candidate states. Thus, real-valued propagation and phase modeling are complementary statistics within one state-evolution process rather than independent prediction branches.
 
-After $L$ reasoning layers, the final representations of the reached entities are used to calculate candidate scores and rank the possible answers. Fig.~\ref{fig:framework} illustrates this layer-wise reasoning framework. The construction of query-adaptive relational context, relation-guided evidence propagation, phase-interference aggregation, and model optimization are detailed in Sections~\ref{subsec:relation-codiffusion}--\ref{subsec:model-training}. For readability, the query index is omitted in the following derivations, and the layer index of relation states is omitted when no ambiguity arises.
+After $L$ layers, the evolved entity states are projected to the global candidate space for answer ranking. Fig.~\ref{fig:framework} gives an overview. Sections~\ref{subsec:relation-codiffusion}--\ref{subsec:model-training} instantiate the three operators and the learning objective. For readability, the query superscript is omitted below when it is unambiguous.
 
 \begin{figure*}[t]
   \centering
+  % TODO(figure polish): Align the candidate-state and evidence-moment symbols
+  % with \mathbf{h}_{v}^{(l,q)}, \boldsymbol{\mu}_{v}^{(l,q)}, and
+  % \boldsymbol{\kappa}_{v}^{(l,q)} in the final artwork.
   \includegraphics[width=\textwidth]{figs/rpcd-gnn-framework.png}
-  \caption{The layer-wise reasoning framework of RPCD-GNN. At each layer, query-conditioned relational context governs relation-phase evidence formation and interference-aware entity-state evolution, followed by recurrent propagation to the next layer.}
+  \caption{Overview of RPCD-GNN. A query activates reusable relation dependencies to induce a shared relational controller, which jointly conditions evidence content, propagation relevance, and interaction phase. Direct and phase-coherent evidence moments are then integrated within each recurrent reasoning layer before candidate ranking.}
   \label{fig:framework}
 \end{figure*}
 
-\subsection{Query-aware Relation Co-Diffusion}\label{subsec:relation-codiffusion}
+\subsection{Query-Relation-Conditioned Relational Context Induction}\label{subsec:relation-codiffusion}
 
-In diffusion-based knowledge graph reasoning, relation embeddings are usually used as static edge labels during entity-level message propagation. However, multi-hop reasoning often depends on relation compositional patterns. For example, the usefulness of a relation may vary according to the query relation, and two relations that frequently co-occur in reasoning paths may provide complementary semantic evidence. RPCD-GNN therefore induces a query-adaptive relational context by propagating relation semantics over a relation dependency graph.
+To make edge direction explicit, every relation $r\in\mathcal{R}$ is paired with an inverse type $r^{-1}$, and an identity relation $r_{\mathrm{id}}$ is introduced for self-propagation. The effective relation vocabulary is therefore $\mathcal{R}'=\mathcal{R}\cup\mathcal{R}^{-1}\cup\{r_{\mathrm{id}}\}$. RPCD-GNN constructs a relation dependency graph $\mathcal{G}_{r}=(\mathcal{R}',\mathcal{E}_{r})$ from recurring local relation co-occurrence patterns in a fixed fact graph. The graph encodes reusable structural compatibility among relations and is shared across queries, whereas its activations are dynamically conditioned on the query relation at each reasoning layer.
 
-We first construct a relation dependency graph from observed facts. To make the relation space consistent with entity-level propagation, we consider original relations, inverse relations, and the identity relation, denoted as $\mathcal{R}'$. For each entity $e$ in the fact graph, let $\mathcal{R}_e$ denote the set of incident relations connected to $e$. The co-occurrence count between relation $r_i$ and relation $r_j$ is defined as
+Let $\mathcal{A}_e$ denote the multiset of direction-aware relation incidences at entity $e$ in this fixed graph, where inverse relation types distinguish incoming from outgoing incidences and $n_e(r)$ records the multiplicity of relation $r$. Relation associations are counted between relation types sharing an anchor entity, considering only anchors that contain more than one relation incidence:
 \begin{equation}
+\begin{aligned}
 C_{ij}
-=
-\sum_{e\in\mathcal{E}}
-\mathbf{1}[r_i\in\mathcal{R}_e]
-\mathbf{1}[r_j\in\mathcal{R}_e],
+&=
+\sum_{\substack{e\in\mathcal{E}\\|\mathcal{A}_e|>1}}
+n_e(r_i)n_e(r_j),\\
+\bar{\pi}_{ij}
+&=
+\begin{cases}
+\dfrac{C_{ij}}{\sum_k C_{ik}},
+& \sum_k C_{ik}>0,\\[5pt]
+0,
+& \text{otherwise}.
+\end{cases}
+\end{aligned}
+\label{eq:relation-structural-prior}
 \end{equation}
-where $\mathbf{1}[\cdot]$ is the indicator function.
-The relation transition probability from $r_i$ to $r_j$ is then calculated by normalizing the co-occurrence counts:
+The normalized associations are filtered by a minimum-weight threshold $\delta_r$, after which source-wise Top-$K_r$ sparsification retains the most informative structural neighbors:
 \begin{equation}
-p(r_j|r_i)=\frac{C_{ij}}{\sum_{k}C_{ik}}.
+\mathcal{S}_{i}
+=
+\operatorname{TopK}_{K_r}
+\left(
+\left\{
+j\mid\bar{\pi}_{ij}\geq\delta_r
+\right\};
+\bar{\pi}_{ij}
+\right).
+\label{eq:relation-neighborhood}
 \end{equation}
-Based on these transition probabilities, we obtain the relation dependency graph $\mathcal{G}_r=(\mathcal{R}',\mathcal{E}_r)$, where each edge reflects the dependency strength between two relations. The graph structure is shared across reasoning layers. At each entity-diffusion layer $l$, RPCD-GNN applies relation co-diffusion to the layer-specific relation embeddings $\mathbf{R}^{(l)}$, conditioned on the corresponding query relation embedding $\mathbf{r}_q^{(l)}$, and recalculates the current relation context $\widetilde{\mathbf{R}}^{(l,q)}$.
+A self-dependency is then added to every retained neighborhood, so $\mathcal{E}_{r}$ contains the selected pairs $(r_i,r_j)$ with $j\in\mathcal{S}_{i}$ together with $(r_i,r_i)$ for each $r_i\in\mathcal{R}'$. The corresponding edge weight is
+\begin{equation}
+\omega_{ij}
+=
+\begin{cases}
+1,
+& i=j,\\
+\bar{\pi}_{ij},
+& j\in\mathcal{S}_{i},\ i\neq j.
+\end{cases}
+\label{eq:relation-edge-weight}
+\end{equation}
+Here, $\bar{\pi}_{ij}$ is a normalized structural association rather than a deterministic logical transition probability: it indicates how often $r_i$ and $r_j$ participate in compatible local motifs, but it does not assert that one relation logically entails the other. Directionality is represented in $\mathcal{R}'$ by treating inverse relations as distinct relation types; it is therefore part of the relation vocabulary rather than a separate reasoning branch. We use $\mathcal{N}_{r}(i)$ to denote the retained neighbors of $r_i$ in $\mathcal{G}_{r}$.
 
-Given the query relation $r_q$, relation co-diffusion is performed in a query-aware manner. Let $\mathbf{r}_i$ and $\mathbf{r}_j$ denote the embeddings of relation $r_i$ and relation $r_j$, respectively. For an edge $(r_i,r_j)$ in $\mathcal{G}_r$, we compute its query-aware diffusion score as
+We use $\phi(\cdot)$ to denote an element-wise nonlinear activation, $\operatorname{sigmoid}(\cdot)$ for logistic gating, and $\epsilon>0$ for numerical stability. At entity reasoning layer $l$, the base states $\{\mathbf{r}_{i}^{(l)}\}$ initialize query-conditioned relation propagation. For inner step $s=1,\ldots,J$ and relation edge $(r_i,r_j)\in\mathcal{E}_{r}$, the query-relation-conditioned activation is
 \begin{equation}
-a_{ij}=
-\mathbf{w}_r^{\top}
-\sigma\left(
-W_s\mathbf{r}_i+
-W_d\mathbf{r}_j+
-W_q\mathbf{r}_q+
-\mathbf{u}_p\log p(r_j|r_i)
-\right),
+\begin{split}
+a_{ij}^{(l,s,q)}
+={}&
+\mathbf{w}_{r}^{\top}\phi\bigl(
+W_{s}^{r}\mathbf{r}_{i}^{(l,s-1,q)}
++W_{d}^{r}\mathbf{r}_{j}^{(l,s-1,q)}\\
+&\quad+W_{q}^{r}\mathbf{r}_{q}^{(l)}
++\mathbf{u}_{\omega}\log(\omega_{ij}+\epsilon)
+\bigr).
+\end{split}
+\label{eq:query-relation-score}
 \end{equation}
-where $W_s$, $W_d$, and $W_q$ are learnable transformation matrices, $\mathbf{u}_p$ maps the scalar transition feature into the relation representation space, $\mathbf{w}_r$ is a learnable attention vector, and $\sigma(\cdot)$ is a nonlinear activation function. The normalized relation diffusion weight is defined as
+The activations are normalized over the retained source-wise neighborhood:
 \begin{equation}
-\alpha_{ij}
+\alpha_{ij}^{(l,s,q)}
 =
-\frac{\exp(a_{ij}/\tau_r)}
-{\sum_{k\in\mathcal{N}_r(i)}\exp(a_{ik}/\tau_r)},
+\frac{
+\exp\left(a_{ij}^{(l,s,q)}/\tau_r\right)
+}{
+\sum_{k\in\mathcal{N}_{r}(i)}
+\exp\left(a_{ik}^{(l,s,q)}/\tau_r\right)
+}.
+\label{eq:query-relation-activation}
 \end{equation}
-where $\mathcal{N}_r(i)$ denotes the neighboring relations of $r_i$ in the relation dependency graph, and $\tau_r$ is a temperature parameter.
-
-The dynamic representation of relation $r_i$ is obtained by aggregating information from its dependent relations:
+The relation state is propagated while retaining the base semantics:
 \begin{equation}
-\mathbf{r}^{dyn}_i
+\mathbf{r}_{i}^{(l,s,q)}
 =
-\beta\mathbf{r}_i+
+\beta\mathbf{r}_{i}^{(l)}
++
 (1-\beta)
-\sigma\left(
-\sum_{j\in\mathcal{N}_r(i)}
-\alpha_{ij}W_m\mathbf{r}_j
-\right),
+\phi\left(
+\sum_{j\in\mathcal{N}_{r}(i)}
+\alpha_{ij}^{(l,s,q)}
+W_{m}^{r}\mathbf{r}_{j}^{(l,s-1,q)}
+\right).
+\label{eq:relation-state-update}
 \end{equation}
-where $W_m$ is a message transformation matrix and $\beta$ controls the residual connection from the base relation embedding. Finally, the relation representation used in entity-level diffusion is defined as
+After $J$ inner steps, the query-conditioned state is fused with the base relation representation:
 \begin{equation}
-\tilde{\mathbf{r}}_i
+\tilde{\mathbf{r}}_{i}^{(l,q)}
 =
-(1-\lambda)\mathbf{r}_i+
-\lambda\mathbf{r}^{dyn}_i,
+(1-\lambda)\mathbf{r}_{i}^{(l)}
++
+\lambda\mathbf{r}_{i}^{(l,J,q)}.
+\label{eq:fused-relational-context}
 \end{equation}
-where $\lambda$ controls the contribution of co-diffused relation semantics. The fused relation state provides the query-adaptive relational context under which reasoning evidence is formed and propagated.
-
-Fig.~\ref{fig:relation-codiffusion} illustrates the construction of the relation dependency graph and the query-aware relation co-diffusion process.
+Here, $\beta$ preserves the base relation semantics throughout inner propagation, while $\lambda$ controls how strongly the resulting query-conditioned context adapts the base relation state.
+Thus, the fixed graph contributes a reusable structural prior, whereas its activation is recomputed for every query relation and reasoning layer. The resulting relational context provides a shared conditioning signal for evidence content, relevance, and phase in the subsequent entity-level evolution. The relation graph is local in construction but global in use: it is distilled from reusable local relation patterns, while its query-relation-conditioned activations regulate evidence evolution throughout multi-hop reasoning.
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=0.68\textwidth]{figs/relation-codiffusion.png}
-  \caption{Illustration of the query-aware relation co-diffusion module, where relation co-occurrences are converted into a relation dependency graph and refined by query-aware diffusion.}
+  \includegraphics[width=\textwidth]{figs/relation-codiffusion.png}
+  \caption{Construction and query-specific activation of the relational context. Direction-aware incidences extracted from the fixed fact graph define normalized structural associations, which are sparsified through source-wise Top-$K_r$ pruning and selectively activated by the query relation at each reasoning layer.}
   \label{fig:relation-codiffusion}
 \end{figure*}
 
-\subsection{Entity-level Diffusion Reasoning}\label{subsec:entity-diffusion}
+\subsection{Relation--Phase Evidence Formation}\label{subsec:entity-diffusion}
 
-Within the query-adaptive relational context, RPCD-GNN propagates evidence from the query entity $h_q$ toward multi-hop candidate entities. Different from conventional entity-level propagation that uses static relation embeddings, RPCD-GNN incorporates $\tilde{\mathbf{r}}_r$ into each diffusion layer. Consequently, the evidence transmitted along each edge is conditioned jointly on the current entity state, the query relation, and the relation dependencies captured by co-diffusion.
-
-At the beginning of reasoning, the reached entity set is initialized as $\mathcal{V}^{(0)}=\{h_q\}$. At the $l$-th diffusion layer, the model expands neighboring edges from the previously reached entities:
-\begin{equation}
-\mathcal{E}^{(l)}
-=
-\{(u,r,v)\mid u\in\mathcal{V}^{(l-1)}, (u,r,v)\in\mathcal{T}\},
-\end{equation}
-where $\mathcal{E}^{(l)}$ denotes the edge set involved in the $l$-th layer. The newly reached entities are then collected from the tail entities of these edges:
-\begin{equation}
-\mathcal{V}^{(l)}
-=
-\mathcal{V}^{(l-1)}
-\cup
-\{v\mid (u,r,v)\in\mathcal{E}^{(l)}\}.
-\end{equation}
-For each reached entity $v$, we define the incoming edge set at layer $l$ as
-\begin{equation}
-\mathcal{E}_{v}^{(l)}
-=
-\{(u,r,v)\mid (u,r,v)\in\mathcal{E}^{(l)}\}.
-\end{equation}
-For each edge $(u,r,v)\in\mathcal{E}^{(l)}$, the relation-guided message is calculated as
+Starting from $\mathcal{V}^{(0)}=\{h_q\}$, RPCD-GNN expands the outgoing edges of the retained frontier $\mathcal{V}^{(l-1)}$ over $\mathcal{T}_{g}$. The reached entities constitute a provisional set $\overline{\mathcal{V}}^{(l)}$, and those first reached at layer $l$ form the candidate set $\mathcal{C}^{(l)}$. For a provisional target $v$, let $\mathcal{E}_{v}^{(l)}$ denote its incoming expanded edges. The semantic content carried by an edge $(u,r,v)$ is
 \begin{equation}
 \mathbf{m}_{u,r,v}^{(l)}
 =
-\sigma\left(
-W_s(\mathbf{h}_u^{(l-1)}+\tilde{\mathbf{r}}_r)
+\phi\left(
+W_{c}^{m}
+\left(
+\mathbf{h}_{u}^{(l-1)}
++
+\tilde{\mathbf{r}}_{r}^{(l)}
+\right)
 -
-W_q(\mathbf{h}_u^{(l-1)}+\mathbf{r}_q)
-\right),
+W_{q}^{m}
+\left(
+\mathbf{h}_{u}^{(l-1)}
++
+\mathbf{r}_{q}^{(l)}
+\right)
+\right).
+\label{eq:semantic-evidence-message}
 \end{equation}
-where $\mathbf{h}_u^{(l-1)}$ is the representation of the source entity $u$ at layer $l-1$, $\tilde{\mathbf{r}}_r$ is the fused dynamic representation of relation $r$, and $\mathbf{r}_q$ is the query relation embedding. This message function measures the semantic difference between the current propagation relation and the query relation, enabling the diffusion process to be guided by query semantics.
-
-To distinguish the contributions of different edges, an attention weight is assigned to each path message:
+This contrastive composition measures the compatibility gap between the propagation relation and the query relation in the current source state. Its admission coefficient is
 \begin{equation}
 \gamma_{u,r,v}^{(l)}
 =
-\sigma\left(
-\mathbf{w}_e^{\top}
-\sigma(
-W_h\mathbf{h}_u^{(l-1)}
-+W_r\tilde{\mathbf{r}}_r
-+W_{qr}\mathbf{r}_q
-)
-\right),
+\operatorname{sigmoid}\left(
+\mathbf{w}_{e}^{\top}
+\phi\left(
+W_{h}^{e}\mathbf{h}_{u}^{(l-1)}
++
+W_{r}^{e}\tilde{\mathbf{r}}_{r}^{(l)}
++
+W_{q}^{e}\mathbf{r}_{q}^{(l)}
+\right)
+\right).
+\label{eq:evidence-admission-gate}
 \end{equation}
-where $W_h$, $W_r$, and $W_{qr}$ are learnable transformation matrices, and $\mathbf{w}_e$ is a learnable attention vector. We define the resulting weighted relation evidence as
+The admitted evidence is then
 \begin{equation}
 \mathbf{x}_{u,r,v}^{(l)}
 =
@@ -392,186 +429,252 @@ where $W_h$, $W_r$, and $W_{qr}$ are learnable transformation matrices, and $\ma
 \mathbf{m}_{u,r,v}^{(l)}.
 \label{eq:weighted-relation-evidence}
 \end{equation}
-The direct real-valued summary of target entity $v$ is obtained by aggregating this evidence over its incoming reasoning paths:
+Here, $\gamma_{u,r,v}^{(l)}$ controls how much semantic content is admitted into subsequent evidence interaction.
+
+To make the interaction among concurrently arriving items explicitly learnable, the same source state, relational context, and query relation parameterize an evidence phase:
 \begin{equation}
-\mathbf{h}_{v}^{real,(l)}
-=
-\sigma\left(
-W_o
-\sum_{(u,r,v)\in\mathcal{E}_{v}^{(l)}}
-\mathbf{x}_{u,r,v}^{(l)}
-\right).
-\end{equation}
-
-The co-diffused relation state $\tilde{\mathbf{r}}_r$ determines the semantic content and propagation strength of the weighted evidence. Together with the source entity and query relation representations, the same relation state is subsequently used to assign an interaction phase to the evidence, allowing multiple incoming messages to be aggregated according to both their relevance and phase interactions.
-
-\subsection{Phase-Interference Message Aggregation}\label{subsec:phase-interference}
-
-Different paths may provide supportive, conflicting, or noisy evidence for the same candidate entity, and direct addition cannot express how these messages reinforce or cancel one another. RPCD-GNN therefore represents each weighted evidence vector in the complex domain and summarizes multi-source evidence through its real, imaginary, and amplitude components.
-
-For each weighted evidence vector $\mathbf{x}_{u,r,v}^{(l)}$, RPCD-GNN first generates a query-aware phase value according to the source entity, the dynamic relation representation, and the query relation:
-\begin{equation}
+\begin{split}
 \theta_{u,r,v}^{(l)}
-=
-\pi\cdot
-\tanh\left(
+={}&
+\pi\tanh\left(
 \frac{
 \mathbf{w}_{p}^{\top}
-\sigma\left(
-W_p[
-\mathbf{h}_u^{(l-1)};
-\tilde{\mathbf{r}}_r;
-\mathbf{r}_q
-]
-\right)}
-{\tau_p}
-\right),
+\phi\left(
+W_{p}\left[
+\mathbf{h}_{u}^{(l-1)};
+\tilde{\mathbf{r}}_{r}^{(l)};
+\mathbf{r}_{q}^{(l)}
+\right]
+\right)
+}{
+\tau_p
+}
+\right).
+\end{split}
+\label{eq:evidence-phase}
 \end{equation}
-where $\theta_{u,r,v}^{(l)}\in[-\pi,\pi]$, $W_p$ and $\mathbf{w}_p$ are learnable parameters, and $\tau_p$ is the phase temperature. The weighted evidence is then encoded in the complex domain as
+The complete relation--phase evidence is
 \begin{equation}
 \mathbf{z}_{u,r,v}^{(l)}
 =
 \mathbf{x}_{u,r,v}^{(l)}
-\exp\left(\mathrm{i}\theta_{u,r,v}^{(l)}\right).
+\exp\left(
+\mathrm{i}\theta_{u,r,v}^{(l)}
+\right).
 \label{eq:complex-relation-phase-evidence}
 \end{equation}
-Its real and imaginary components are
+Here, $\theta_{u,r,v}^{(l)}\in(-\pi,\pi)$.
+Equations~\eqref{eq:weighted-relation-evidence} and~\eqref{eq:complex-relation-phase-evidence} show that magnitude and phase are not produced by unrelated components. Both are query-relation-conditioned views of a single evidence item: $\mathbf{x}$ captures its admitted content, while $\theta$ specifies how that content interacts with other evidence reaching the same candidate.
+
+\subsection{Interaction-Aware Evidence Evolution}\label{subsec:phase-interference}
+
+\subsubsection{Direct and Phase-Coherent Evidence Moments}
+
+Let $\mathcal{X}_{v}^{(l)}$ collect the admitted evidence and phases carried by all edges in $\mathcal{E}_{v}^{(l)}$. The direct moment retains the accumulated real-valued evidence mass:
 \begin{equation}
-\mathbf{m}_{u,r,v}^{re,(l)}
+\boldsymbol{\mu}_{v}^{(l)}
 =
-\operatorname{Re}\mathbf{z}_{u,r,v}^{(l)}
-=
-\mathbf{x}_{u,r,v}^{(l)}
-\cos\theta_{u,r,v}^{(l)},
+\sum_{(u,r,v)\in\mathcal{E}_{v}^{(l)}}
+\mathbf{x}_{u,r,v}^{(l)}.
+\label{eq:direct-evidence-moment}
 \end{equation}
+The phase-coherent moment and its element-wise amplitude are
 \begin{equation}
-\mathbf{m}_{u,r,v}^{im,(l)}
+\begin{aligned}
+\boldsymbol{\kappa}_{v}^{(l)}
+&=
+\sum_{(u,r,v)\in\mathcal{E}_{v}^{(l)}}
+\mathbf{z}_{u,r,v}^{(l)}
 =
-\operatorname{Im}\mathbf{z}_{u,r,v}^{(l)}
-=
-\mathbf{x}_{u,r,v}^{(l)}
-\sin\theta_{u,r,v}^{(l)}.
-\end{equation}
-The real and imaginary components of all incoming path messages are aggregated as
-\begin{equation}
 \mathbf{M}_{v}^{re,(l)}
-=
-\sum_{(u,r,v)\in\mathcal{E}_{v}^{(l)}}
-\mathbf{m}_{u,r,v}^{re,(l)},
-\end{equation}
-\begin{equation}
-\mathbf{M}_{v}^{im,(l)}
-=
-\sum_{(u,r,v)\in\mathcal{E}_{v}^{(l)}}
-\mathbf{m}_{u,r,v}^{im,(l)}.
-\end{equation}
-To preserve the overall strength of path evidence, we further compute the amplitude component:
-\begin{equation}
-\mathbf{A}_{v}^{(l)}
++
+\mathrm{i}\mathbf{M}_{v}^{im,(l)},\\
+\boldsymbol{\rho}_{v}^{(l)}
+&=
+\left|
+\boldsymbol{\kappa}_{v}^{(l)}
+\right|
 =
 \sqrt{
-(\mathbf{M}_{v}^{re,(l)})^2+
-(\mathbf{M}_{v}^{im,(l)})^2+
+\left(\mathbf{M}_{v}^{re,(l)}\right)^2
++
+\left(\mathbf{M}_{v}^{im,(l)}\right)^2
++
 \epsilon
-},
+}.
+\end{aligned}
+\label{eq:coherent-evidence-moment}
 \end{equation}
-where $\epsilon$ is a small constant for numerical stability, and the square and square-root operations are element-wise.
 
-The phase-interference representation of entity $v$ is obtained by combining the real, imaginary, and amplitude components:
+The mathematical role of phase becomes clear by considering dimension $d$ of the coherent moment:
 \begin{equation}
-\mathbf{h}_{v}^{phase,(l)}
+\left|
+\kappa_{v,d}^{(l)}
+\right|^2
 =
-\sigma\left(
-W_{re}\mathbf{M}_{v}^{re,(l)}
-+W_{im}\mathbf{M}_{v}^{im,(l)}
-+W_a\mathbf{A}_{v}^{(l)}
+\sum_i x_{i,d}^{2}
++
+2\sum_{i<j}
+x_{i,d}x_{j,d}
+\cos\left(\theta_i-\theta_j\right).
+\label{eq:phase-interaction-necessity}
+\end{equation}
+The cross terms depend on relative phase. Aligned evidence is reinforced, oppositely phased evidence is attenuated, and intermediate phase differences yield graded interactions. A conventional sum only preserves the first-order total $\sum_i x_{i,d}$ and cannot directly parameterize these pairwise compatibility terms. Phase is therefore used as a compact interaction coordinate, not as a metaphorical complex-valued decoration.
+
+The two moments are integrated by one relation--phase evidence operator:
+\begin{equation}
+\begin{split}
+\mathcal{U}_{\mathrm{RPE}}
+\left(\mathcal{X}_{v}^{(l)}\right)
+=\;&
+\phi\left(
+W_{\mu}\boldsymbol{\mu}_{v}^{(l)}
+\right)\\
+&+
+\eta
+\phi\left(
+W_{re}\operatorname{Re}
+\boldsymbol{\kappa}_{v}^{(l)}
++
+W_{im}\operatorname{Im}
+\boldsymbol{\kappa}_{v}^{(l)}
++
+W_{\rho}\boldsymbol{\rho}_{v}^{(l)}
 \right).
+\end{split}
+\label{eq:unified-relation-phase-operator}
 \end{equation}
-The direct real-valued summary and the phase-interference summary are complementary statistics derived from the same incoming evidence. They first form the current evidence summary
+Both moments are computed from the same incoming evidence set and jointly parameterize a single candidate-state update. The direct moment preserves accumulated evidence mass, whereas the coherent moment retains phase-dependent interaction structure. Their additive projections therefore represent complementary statistics within one relation--phase evidence operator.
+
+\subsubsection{Bounded Frontier Selection and Recurrent State Update}
+
+Before recurrent evolution, RPCD-GNN limits the number of newly retained entities to prevent exponential frontier growth. For each provisional entity $v$, the unified operator output is used as its provisional state $\widehat{\mathbf{h}}_{v}^{(l)}=\mathcal{U}_{\mathrm{RPE}}(\mathcal{X}_{v}^{(l)})$. A candidate is scored by
 \begin{equation}
-\bar{\mathbf{h}}_{v}^{(l)}
+s_{v}^{(l)}
 =
-\mathbf{h}_{v}^{real,(l)}
-+\eta
-\mathbf{h}_{v}^{phase,(l)},
+\mathbf{w}_{s}^{\top}
+\widehat{\mathbf{h}}_{v}^{(l)}.
+\label{eq:candidate-selection-score}
 \end{equation}
-where $\eta$ controls the contribution of the interference-aware evidence summary. To preserve evidence accumulated in earlier hops, RPCD-GNN performs a recurrent state update:
+The retained entity set is updated by keeping the previous frontier and the $K_l$ highest-scoring new candidates:
+\begin{equation}
+\mathcal{V}^{(l)}
+=
+\mathcal{V}^{(l-1)}
+\cup
+\operatorname{TopK}_{K_l}
+\left(
+\mathcal{C}^{(l)};
+\widetilde{\mathbf{s}}^{(l)}
+\right).
+\label{eq:topk-frontier-update}
+\end{equation}
+Finally, evidence is accumulated recurrently over reasoning layers:
 \begin{equation}
 \mathbf{h}_{v}^{(l)}
 =
 \operatorname{GRU}\left(
-\bar{\mathbf{h}}_{v}^{(l)},
+\widehat{\mathbf{h}}_{v}^{(l)},
 \mathbf{h}_{v}^{(l-1)}
-\right).
+\right),
+\quad
+v\in\mathcal{V}^{(l)}.
 \label{eq:recurrent-entity-update}
 \end{equation}
-For entities first reached at layer $l$, the previous recurrent state is initialized to zero. Through this update, direct evidence accumulation, constructive or destructive interactions, and evidence retained from preceding layers jointly determine entity-state evolution. The updated state $\mathbf{h}_v^{(l)}$ is subsequently used as the input state of entity $v$ at layer $l+1$, thereby closing the layer-wise reasoning recursion illustrated in Fig.~\ref{fig:framework}.
+Here, $\widetilde{\mathbf{s}}^{(l)}$ denotes the Gumbel--Softmax-relaxed candidate scores with temperature $\tau_s$ during training and the deterministic scores during inference. Hard Top-$K_l$ retention uses a straight-through estimator in training so that the selection scores remain differentiable. Previously retained entities are preserved, while only the most informative newly reached entities enter the next frontier.
 
-\subsection{Model Training}\label{subsec:model-training}
+For a newly retained entity, the previous state is initialized to zero. The updated state becomes the source evidence state at layer $l+1$, closing the recursive evolution from relation structure to local interaction, bounded frontier selection, and multi-hop candidate semantics.
 
-Algorithm~\ref{alg:rpcd-forward} summarizes the forward propagation process of RPCD-GNN.
+\subsection{Answer Prediction and Model Optimization}\label{subsec:model-training}
+
+Algorithm~\ref{alg:rpcd-forward} summarizes the query-level forward process. The shared relation dependency structure is activated by the query relation at every reasoning layer.
 
 \begin{algorithm}[t]
-\caption{Forward propagation of RPCD-GNN}
+\caption{Relation--phase evidence evolution in RPCD-GNN}
 \label{alg:rpcd-forward}
 \begin{algorithmic}[1]
-\Require Knowledge graph $\mathcal{G}$, query $(h_q,r_q,?)$, diffusion layers $L$
-\Ensure Scores over candidate answer entities
-\State Construct relation dependency graph $\mathcal{G}_r$ from observed facts
-\State Initialize reached entity set $\mathcal{V}^{(0)}=\{h_q\}$
+\Require Reasoning graph $\mathcal{T}_{g}$, relation graph $\mathcal{G}_{r}$, query $(h_q,r_q,?)$, layers $L$, relation steps $J$, frontier budgets $\{K_l\}_{l=1}^{L}$
+\Ensure Scores over $\mathcal{E}$
+\State Initialize $\mathcal{V}^{(0)}=\{h_q\}$ and its zero state
 \For{$l=1$ to $L$}
-    \State Obtain layer-specific embeddings $\mathbf{R}^{(l)}$ and $\mathbf{r}_q^{(l)}$
-    \State Compute relation context $\widetilde{\mathbf{R}}^{(l,q)}$ by query-aware co-diffusion
-    \State Expand neighboring edges $\mathcal{E}^{(l)}$ from $\mathcal{V}^{(l-1)}$
-    \For{each edge $(u,r,v)\in\mathcal{E}^{(l)}$}
-        \State Compute relation-guided message $\mathbf{m}_{u,r,v}^{(l)}$
-        \State Compute weighted evidence $\mathbf{x}_{u,r,v}^{(l)}$
-        \State Generate phase $\theta_{u,r,v}^{(l)}$ and complex evidence $\mathbf{z}_{u,r,v}^{(l)}$
+    \State Induce $\widetilde{\mathbf{R}}^{(l,q)}$ from $r_q$ through $J$ relation-propagation steps
+    \State Expand $\mathcal{E}^{(l)}$ and obtain $\overline{\mathcal{V}}^{(l)}$ and $\mathcal{C}^{(l)}$
+    \For{each $(u,r,v)\in\mathcal{E}^{(l)}$}
+        \State Form admitted evidence $\mathbf{x}_{u,r,v}^{(l)}$
+        \State Assign $\theta_{u,r,v}^{(l)}$ and form $\mathbf{z}_{u,r,v}^{(l)}$
     \EndFor
-    \State Aggregate direct, real, imaginary, and amplitude evidence
-    \State Form evidence summary $\bar{\mathbf{h}}_v^{(l)}$
-    \State Update recurrent entity state $\mathbf{h}_v^{(l)}$ with the GRU
+    \For{each $v\in\overline{\mathcal{V}}^{(l)}$}
+        \State Compute $\boldsymbol{\mu}_{v}^{(l)}$, $\boldsymbol{\kappa}_{v}^{(l)}$, and $\boldsymbol{\rho}_{v}^{(l)}$
+        \State Form provisional state $\widehat{\mathbf{h}}_{v}^{(l)}$
+    \EndFor
+    \State Score $\mathcal{C}^{(l)}$ and update the bounded frontier by Eq.~\eqref{eq:topk-frontier-update}
+    \For{each $v\in\mathcal{V}^{(l)}$}
+        \State Evolve retained state $\mathbf{h}_{v}^{(l)}$ by Eq.~\eqref{eq:recurrent-entity-update}
+    \EndFor
 \EndFor
-\State Compute $score(h_q,r_q,e)$ for all candidate entities $e\in\mathcal{E}$
-\State \Return candidate entity scores
+\State Project reached states and map them to the global candidate space
+\State \Return $\{score(h_q,r_q,e)\mid e\in\mathcal{E}\}$
 \end{algorithmic}
 \end{algorithm}
 
-After $L$ diffusion layers, RPCD-GNN obtains the final representation $\mathbf{h}_e^{(L)}$ for each reached candidate entity $e$. The score of a candidate answer entity is calculated by a linear scoring function:
+After $L$ layers, the reached states are mapped into the full entity space, with unreached candidates assigned the default zero state. Each global candidate state $\overline{\mathbf{h}}_{e}^{(L)}$ is then projected by a learnable vector $\mathbf{w}_{o}$:
 \begin{equation}
 score(h_q,r_q,e)
 =
-\mathbf{w}_o^{\top}\mathbf{h}_e^{(L)},
+\mathbf{w}_{o}^{\top}
+\overline{\mathbf{h}}_{e}^{(L)}.
+\label{eq:global-candidate-score}
 \end{equation}
-where $\mathbf{w}_o$ is a learnable parameter vector. In practice, valid prediction scores are produced for the entities reached by the diffusion process and then mapped to the candidate entity space for ranking.
-
-Given a training query $(h_q,r_q,t)$ with ground-truth answer entity $t$, the model is trained with a softmax objective over candidate entities:
+This definition makes the candidate protocol explicit and clarifies that optimization is performed over the entire entity vocabulary even though only reached candidates acquire evolved states. For a training query $(h_q,r_q,t)$, the loss is
 \begin{equation}
 \mathcal{L}
 =
 -
 \log
 \frac{
-\exp(score(h_q,r_q,t))
+\exp\left(score(h_q,r_q,t)\right)
 }{
 \sum_{e\in\mathcal{E}}
-\exp(score(h_q,r_q,e))
+\exp\left(score(h_q,r_q,e)\right)
 }.
+\label{eq:training-objective}
 \end{equation}
-This objective encourages the score of the correct answer entity to be higher than those of other candidate entities. During evaluation, candidate entities are ranked according to their scores, and standard filtered metrics, including MRR and Hits@K, are used to evaluate reasoning performance.
+At evaluation time, all entities are ranked by these scores under the filtered protocol.
+
+\subsection{Computational Complexity}\label{subsec:computational-complexity}
+
+Let $B$ be the query batch size, $d$ the hidden dimension, $a$ the attention dimension, $M_R$ the number of edges in the sparse relation dependency graph, and $J$ the number of relation-propagation steps within each reasoning layer. Let $M_l$ and $N_l$ denote the numbers of expanded entity edges and reached candidate nodes at layer $l$, respectively, accumulated over the batch. The per-batch online time complexity of RPCD-GNN is
+\begin{equation}
+\begin{split}
+\mathcal{O}\!\Bigg(
+\sum_{l=1}^{L}
+\left[
+{}&BJM_R(d^2+da)
++M_l(d^2+da)
+\\
+{}&+N_ld^2
++B|\mathcal{E}|\log K_l
+\right]
+\\
+{}&+B|\mathcal{E}|
+\Bigg).
+\end{split}
+\label{eq:computational-complexity}
+\end{equation}
+The four terms inside the summation correspond to query-relation-conditioned relation propagation, entity-edge evidence formation, phase-aware aggregation with recurrent state updates, and frontier selection, respectively. The last term accounts for mapping the reached states to the global score buffer and normalizing scores during optimization. The dense frontier-selection term reflects the current batched implementation, which performs Top-$K_l$ selection over an entity-wise score buffer even though message propagation is restricted to dynamically reached candidates. Since each source relation retains at most $K_r$ structural neighbors together with one self-dependency, the sparse relation graph satisfies $M_R\leq|\mathcal{R}'|(K_r+1)$. Consequently, the online relation-context overhead is bounded by $\mathcal{O}(BLJ|\mathcal{R}'|(K_r+1)(d^2+da))$, which depends on the relation vocabulary rather than the number of entities once the relation graph has been precomputed. Before training, the unpruned relation dependency graph is constructed once in $\mathcal{O}(\sum_{e\in\mathcal{E}}c_e^2)$ time, where $c_e=|\mathcal{A}_e|$ is the number of direction-aware relation incidences at entity $e$, and is subsequently sparsified by relation-wise Top-$K_r$ pruning. Relative to the entity-diffusion backbone, the principal additional memory terms are $\mathcal{O}(B|\mathcal{R}'|d+M_R)$ for query-relation-conditioned relation states and the sparse relation graph, where $|\mathcal{R}'|=2|\mathcal{R}|+1$ includes original, inverse, and identity relations.
 
 \section{Experiments}\label{sec:experiments}
 
 \subsection{Datasets}\label{subsec:datasets}
 
-We evaluate RPCD-GNN on five transductive knowledge graph reasoning datasets, including Family, UMLS, WN18RR, NELL-995, and FB15k-237. These datasets cover different graph scales, relation densities, and reasoning patterns, which allows us to examine whether the proposed relation co-diffusion and phase-interference aggregation modules are effective under both small-scale logical reasoning scenarios and large-scale knowledge graph reasoning scenarios.
+We evaluate RPCD-GNN on five transductive knowledge graph reasoning datasets, including Family, UMLS, WN18RR, NELL-995, and FB15k-237. These datasets cover different graph scales, relation densities, and reasoning patterns, allowing us to examine relation--phase evidence evolution in both small-scale logical reasoning and large-scale knowledge graph scenarios.
 
 Family is a relational reasoning dataset derived from kinship relations, where the target is to infer implicit family relations from observed relational facts \citep{Kok2007Statistical,Sadeghian2019DRUM}. UMLS is a biomedical relational dataset constructed from the Unified Medical Language System and is commonly used to evaluate multi-relational reasoning over medical concepts \citep{Bodenreider2004UMLS,Sadeghian2019DRUM}. WN18RR is a leakage-reduced subset of WordNet that removes inverse-relation shortcuts from WN18 and therefore requires models to exploit more meaningful relational evidence \citep{Dettmers2018ConvE}. FB15k-237 is derived from Freebase by removing near-duplicate and inverse relations, making it a challenging benchmark for relation prediction \citep{Toutanova2015Observed,Dettmers2018ConvE}. NELL-995 is a large-scale knowledge graph reasoning dataset constructed from the Never-Ending Language Learning project and contains more entities and sparse relational patterns \citep{Xiong2017DeepPath}.
 
-Following the transductive setting, the observed facts are used as the reasoning graph, while the training, validation, and test triples are used as supervised reasoning queries. The statistics of the datasets used in our experiments are shown in Table~\ref{tab:dataset-statistics}.
+The released benchmark files contain a permanent fact set $\mathcal{T}_{f}$, a training set $\mathcal{T}_{tr}$, a validation set $\mathcal{T}_{va}$, and a test set $\mathcal{T}_{te}$. Their statistics are summarized in Table~\ref{tab:dataset-statistics}; the graph--query construction used at each experimental stage is detailed in Section~\ref{subsec:implementation-details}.
 
 \begin{table*}[t]
-\caption{Statistics of the datasets used in the experiments.}
+\caption{Statistics of the transductive reasoning datasets. Relation and triple counts are reported before augmentation with inverse relations and identity self-loops.}
 \label{tab:dataset-statistics}
 \centering
 \begin{tabular}{lrrrrrr}
@@ -589,130 +692,244 @@ FB15k-237 & 14,541 & 237 & 204,087 & 68,028 & 17,535 & 20,466 \\
 
 \subsection{Baselines and Evaluation Metrics}\label{subsec:baselines-metrics}
 
-To comprehensively evaluate the effectiveness of RPCD-GNN, we compare it with representative non-GNN and GNN-based knowledge graph reasoning models. The non-GNN baselines include embedding-based methods, path-based reasoning methods, and rule-based reasoning methods: ConvE \citep{Dettmers2018ConvE}, QuatE \citep{Zhang2019QuatE}, RotatE \citep{Sun2019RotatE}, MINERVA \citep{Das2018MINERVA}, DRUM \citep{Sadeghian2019DRUM}, RNNLogic \citep{Qu2021RNNLogic}, RLogic \citep{Cheng2022RLogic}, NodePiece \citep{Galkin2022NodePiece}, and MorsE with RotatE as the base scoring function \citep{Chen2021MorsE}. These methods provide comparisons from triple-level representation learning, sequential path search, differentiable rule learning, and parameter-efficient entity representation perspectives.
+We compare RPCD-GNN with representative knowledge graph reasoning methods from complementary reasoning paradigms. The non-GNN baselines include embedding-based models ConvE \citep{Dettmers2018ConvE}, QuatE \citep{Zhang2019QuatE}, and RotatE \citep{Sun2019RotatE}; path- and rule-based reasoners MINERVA \citep{Das2018MINERVA}, DRUM \citep{Sadeghian2019DRUM}, RNNLogic \citep{Qu2021RNNLogic}, and RLogic \citep{Cheng2022RLogic}; and parameter-efficient representation models NodePiece \citep{Galkin2022NodePiece} and MorsE with RotatE as its base scoring function \citep{Chen2021MorsE}. Together, they provide comparisons from triple scoring, explicit relational composition, and parameter-efficient representation learning perspectives.
 
-For GNN-based methods, we compare RPCD-GNN with CompGCN \citep{Vashishth2020CompGCN}, NBFNet \citep{Zhu2021NBFNet}, ConGLR, RED-GNN \citep{Zhang2022REDGNN}, and DiffusionE \citep{Cao2024DiffusionE}. Among them, CompGCN represents full-graph relational message passing, NBFNet and RED-GNN are representative query-centered progressive reasoning methods, and DiffusionE represents diffusion-based KG reasoning. For the baselines whose official results are available under the same data split, we follow the reported comparison protocol in DiffusionE \citep{Cao2024DiffusionE}. Therefore, these baselines allow us to verify whether relation-phase co-diffusion brings consistent improvements over both conventional reasoning models and recent GNN-based reasoning models.
+The GNN-based baselines include CompGCN \citep{Vashishth2020CompGCN}, NBFNet \citep{Zhu2021NBFNet}, RED-GNN \citep{Zhang2022REDGNN}, AdaProp \citep{Zhang2023AdaProp}, A*Net \citep{Zhu2023AStarNet}, DiffusionE \citep{Cao2024DiffusionE}, and Top-p reasoning \citep{Liu2025TopPReasoning}. CompGCN represents full-graph relational aggregation, whereas NBFNet, RED-GNN, AdaProp, A*Net, and Top-p reasoning represent different forms of query-dependent progressive propagation. DiffusionE serves as the direct diffusion-based predecessor of RPCD-GNN. This comparison therefore examines whether relation--phase evidence evolution improves upon the underlying diffusion paradigm while remaining competitive with independently developed adaptive-propagation methods. A reported result is included only when its dataset split, reasoning setting, and filtered evaluation protocol are compatible with ours; otherwise, the corresponding entry is left unreported.
 
-Following previous knowledge graph reasoning studies, we adopt the filtered ranking protocol for evaluation. For each test query $(h_q,r_q,?)$, all candidate entities are ranked according to their prediction scores, and other known true triples appearing in the training, validation, or test set are filtered out before computing the rank of the target answer. We report mean reciprocal rank (MRR), Hits@1, and Hits@10 as evaluation metrics. Higher values of these metrics indicate better reasoning performance.
+Following the standard filtered-ranking protocol, we evaluate both tail prediction and head prediction, where head-prediction queries are converted into tail-prediction queries using inverse relations. For each query, all entities are ranked according to their prediction scores, while other known correct answers in $\mathcal{T}_{f}\cup\mathcal{T}_{tr}\cup\mathcal{T}_{va}\cup\mathcal{T}_{te}$ are removed only when computing the rank of the target entity. We report mean reciprocal rank (MRR), Hits@1, and Hits@10, with higher values indicating better reasoning performance.
+
+\subsection{Implementation Details}\label{subsec:implementation-details}
+
+At each training epoch $s$, $\mathcal{T}_{f}$ and $\mathcal{T}_{tr}$ are pooled and randomly repartitioned according to the dataset-specific fact ratio $\varrho$. The retained triples form the current reasoning graph $\mathcal{T}_{g}^{(s)}$, while the remaining triples provide supervised queries $\mathcal{T}_{q}^{(s)}$. During validation and testing, $\mathcal{T}_{f}\cup\mathcal{T}_{tr}$ forms the fixed reasoning graph, and queries are drawn from $\mathcal{T}_{va}$ and $\mathcal{T}_{te}$, respectively. The relation dependency graph is constructed once from $\mathcal{T}_{f}$ and remains fixed throughout training and evaluation. For FB15k-237, direct one-hop connections associated with the current training queries are removed from $\mathcal{T}_{g}^{(s)}$ following the released backbone protocol.
+
+RPCD-GNN is implemented in PyTorch and optimized using Adam on a single NVIDIA GPU. Inverse relations and identity self-loops are included in the entity message-passing graph, and inverse relation types are also used in the direction-aware incidences defined in Section~\ref{subsec:relation-codiffusion}. The query-conditioned activations of the fixed relation dependency graph are recomputed at every entity reasoning layer. Following the released transductive configurations of DiffusionE \citep{Cao2024DiffusionE}, we retain its dataset-specific propagation depth, frontier budget, batch size, fact ratio, and optimization settings. The model is trained for at most 300 epochs with an exponentially decayed learning rate, and the checkpoint achieving the highest validation MRR is used for final evaluation. RPCD-specific parameters $K_r$, $\delta_r$, $J$, $\lambda$, $\beta$, $\eta$, $\tau_r$, and $\tau_p$ are selected according to validation MRR. Final results are reported as the mean and standard deviation over three independent runs.
+
+% TODO(final experiments): specify the GPU model and software versions.
+\begin{table*}[t]
+\caption{Dataset-specific backbone and training configurations used in the experiments.}
+\label{tab:implementation-settings}
+\centering
+\small
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{lrrrrrrrr}
+\toprule
+Dataset & $d$ & $a$ & $L$ & $K_l$ & $\varrho$ & Batch & LR & WD \\
+\midrule
+Family & 48 & 5 & 8 & 100 & 0.90 & 20 & 0.0036 & 0.000017 \\
+UMLS & 64 & 5 & 5 & 100 & 0.90 & 10 & 0.0012 & 0.000140 \\
+WN18RR & 64 & 5 & 8 & 1000 & 0.96 & 50 & 0.0030 & 0.000140 \\
+FB15k-237 & 48 & 5 & 7 & 2000 & 0.99 & 6 & 0.0009 & 0.000080 \\
+NELL-995 & 128 & 64 & 6 & 2000 & 0.95 & 10 & 0.0011 & 0.000089 \\
+\bottomrule
+\end{tabular}
+\end{table*}
 
 \subsection{Results and Analysis}\label{subsec:results-analysis}
 
-All experiments are conducted under the transductive reasoning setting. Following DiffusionE \citep{Cao2024DiffusionE}, the observed fact triples are used to construct the reasoning graph, while the training, validation, and test triples are treated as supervised reasoning queries. The hyperparameters of each model are selected on the validation set, and the final test results are reported using the checkpoint with the best validation MRR. This setting ensures that RPCD-GNN is compared with the baselines under the same reasoning protocol.
+All reported results follow the transductive filtered-ranking protocol described above. RPCD-GNN checkpoints are selected exclusively according to validation MRR. Literature results are included only when the dataset partition, candidate-ranking space, and filtering protocol are compatible with our setting.
 
 \begin{table*}[t]
-\caption{Transductive reasoning results on Family, UMLS, and WN18RR. The best results are shown in bold.}
+\caption{Experimental results on Family and UMLS. The best and second-best results are highlighted in bold and underlined, respectively.}
 \label{tab:main-results-small}
 \centering
 \small
-\setlength{\tabcolsep}{3.5pt}
-\begin{tabular}{llccccccccc}
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{llcccccc}
 \hline
 Type & Model
 & \multicolumn{3}{c}{Family}
-& \multicolumn{3}{c}{UMLS}
-& \multicolumn{3}{c}{WN18RR} \\
-\cline{3-11}
-& & MRR & H@1 & H@10 & MRR & H@1 & H@10 & MRR & H@1 & H@10 \\
+& \multicolumn{3}{c}{UMLS} \\
+\cline{3-8}
+& & MRR & H@1 & H@10 & MRR & H@1 & H@10 \\
 \hline
-non-GNN & ConvE & 0.912 & 0.837 & 0.982 & 0.937 & 0.922 & 0.967 & 0.427 & 0.392 & 0.498 \\
- & QuatE & 0.941 & 0.896 & 0.991 & 0.944 & 0.905 & 0.993 & 0.480 & 0.440 & 0.551 \\
- & RotatE & 0.921 & 0.866 & 0.988 & 0.925 & 0.863 & 0.993 & 0.477 & 0.428 & 0.571 \\
- & MINERVA & 0.885 & 0.825 & 0.961 & 0.825 & 0.728 & 0.968 & 0.448 & 0.413 & 0.513 \\
- & DRUM & 0.934 & 0.881 & 0.996 & 0.813 & 0.674 & 0.976 & 0.486 & 0.425 & 0.586 \\
- & RNNLogic & 0.881 & 0.857 & 0.907 & 0.842 & 0.772 & 0.965 & 0.483 & 0.446 & 0.558 \\
- & RLogic & -- & -- & -- & -- & -- & -- & 0.470 & 0.443 & 0.537 \\
- & NodePiece & 0.892 & 0.837 & 0.971 & 0.844 & 0.736 & 0.968 & 0.459 & 0.432 & 0.543 \\
- & MorsE (RotatE) & 0.938 & 0.886 & 0.994 & 0.815 & 0.679 & 0.978 & 0.493 & 0.435 & 0.596 \\
+non-GNN & ConvE & 0.912 & 0.837 & 0.982 & 0.937 & 0.922 & 0.967 \\
+ & QuatE & 0.941 & 0.896 & 0.991 & 0.944 & 0.905 & 0.993 \\
+ & RotatE & 0.921 & 0.866 & 0.988 & 0.925 & 0.863 & 0.993 \\
+ & MINERVA & 0.885 & 0.825 & 0.961 & 0.825 & 0.728 & 0.968 \\
+ & DRUM & 0.934 & 0.881 & \underline{0.996} & 0.813 & 0.674 & 0.976 \\
+ & RNNLogic & 0.881 & 0.857 & 0.907 & 0.842 & 0.772 & 0.965 \\
+ & NodePiece & 0.892 & 0.837 & 0.971 & 0.844 & 0.736 & 0.968 \\
+ & MorsE (RotatE) & 0.938 & 0.886 & 0.994 & 0.815 & 0.679 & 0.978 \\
 \hline
-GNN & CompGCN & 0.933 & 0.883 & 0.991 & 0.927 & 0.867 & 0.994 & 0.479 & 0.443 & 0.546 \\
- & NBFNet & 0.989 & 0.988 & 0.989 & 0.948 & 0.920 & 0.995 & 0.551 & 0.497 & 0.666 \\
- & ConGLR & 0.982 & 0.971 & 0.969 & 0.952 & 0.923 & 0.981 & 0.532 & 0.473 & 0.654 \\
- & RED-GNN & \textbf{0.992} & 0.988 & \textbf{0.997} & 0.964 & 0.946 & 0.990 & 0.533 & 0.485 & 0.624 \\
- & DiffusionE & 0.990 & \textbf{0.989} & 0.992 & 0.970 & 0.957 & 0.992 & 0.557 & 0.504 & 0.658 \\
- & RPCD-GNN & 0.990 & \textbf{0.989} & 0.991 & \textbf{0.982} & \textbf{0.971} & \textbf{0.996} & \textbf{0.576} & \textbf{0.524} & \textbf{0.679} \\
+GNN & CompGCN & 0.933 & 0.883 & 0.991 & 0.927 & 0.867 & 0.994 \\
+ & NBFNet & 0.989 & \underline{0.988} & 0.989 & 0.948 & 0.920 & \underline{0.995} \\
+ & RED-GNN & \textbf{0.992} & \underline{0.988} & \textbf{0.997} & 0.964 & 0.946 & 0.990 \\
+ & AdaProp & 0.988 & 0.986 & 0.990 & 0.969 & 0.956 & \underline{0.995} \\
+ & DiffusionE & \underline{0.990} & \textbf{0.989} & 0.992 & \underline{0.970} & \underline{0.957} & 0.992 \\
+ & RPCD-GNN & \underline{0.990} & \textbf{0.989} & 0.991 & \textbf{0.982} & \textbf{0.971} & \textbf{0.996} \\
 \hline
 \end{tabular}
 \end{table*}
 
-The main results on Family, UMLS, and WN18RR are reported in Table~\ref{tab:main-results-small}. Overall, GNN-based reasoning methods generally outperform non-GNN baselines. This observation is consistent with previous studies: embedding-based models mainly rely on triple-level scoring, while path- and rule-based methods depend on explicit path search or rule induction. In contrast, GNN-based methods can aggregate multi-hop structural evidence around the query entity, which is more suitable for knowledge graph reasoning.
+\begin{table*}[t]
+\caption{Experimental results on WN18RR, FB15k-237, and NELL-995. The best and second-best results are highlighted in bold and underlined, respectively.}
+\label{tab:main-results-large}
+\centering
+\small
+\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{lccccccccc}
+\hline
+Model
+& \multicolumn{3}{c}{WN18RR}
+& \multicolumn{3}{c}{FB15k-237}
+& \multicolumn{3}{c}{NELL-995} \\
+\cline{2-10}
+& MRR & H@1 & H@10 & MRR & H@1 & H@10 & MRR & H@1 & H@10 \\
+\hline
+NBFNet & 0.551 & 0.497 & 0.666 & 0.415 & 0.321 & \textbf{0.599} & 0.525 & 0.451 & 0.639 \\
+RED-GNN & 0.533 & 0.485 & 0.624 & 0.374 & 0.283 & 0.558 & 0.543 & 0.476 & 0.651 \\
+AdaProp & \underline{0.562} & 0.499 & 0.671 & \underline{0.417} & \underline{0.331} & 0.585 & \underline{0.554} & \underline{0.493} & \underline{0.655} \\
+A*Net & 0.549 & 0.495 & 0.659 & 0.411 & 0.321 & \underline{0.586} & -- & -- & -- \\
+DiffusionE & 0.557 & \underline{0.504} & 0.658 & 0.376 & 0.294 & 0.539 & 0.552 & 0.490 & 0.654 \\
+Top-p reasoning & 0.559 & 0.498 & \underline{0.676} & \textbf{0.423} & \textbf{0.434} & 0.583 & \textbf{0.559} & \textbf{0.496} & \textbf{0.662} \\
+RPCD-GNN & \textbf{0.576} & \textbf{0.524} & \textbf{0.679} & -- & -- & -- & -- & -- & -- \\
+\hline
+\end{tabular}
+\end{table*}
 
-Among GNN-based methods, progressive propagation models such as NBFNet, RED-GNN, DiffusionE, and RPCD-GNN show stronger performance than the full-propagation model CompGCN. This suggests that query-centered propagation is more effective than indiscriminate full-graph aggregation, especially when the reasoning process needs to identify a small set of useful multi-hop evidence paths from a large graph. Compared with DiffusionE, RPCD-GNN achieves clear improvements on UMLS and WN18RR. On UMLS, RPCD-GNN improves MRR from 0.970 to 0.982, Hits@1 from 0.957 to 0.971, and Hits@10 from 0.992 to 0.996. On WN18RR, RPCD-GNN improves MRR from 0.557 to 0.576, Hits@1 from 0.504 to 0.524, and Hits@10 from 0.658 to 0.679. These results indicate that extending entity-level diffusion to relation-phase co-diffusion is effective for datasets with more complex relation semantics and multi-hop evidence.
+Table~\ref{tab:main-results-small} presents the comparison on the compact Family and UMLS reasoning benchmarks, whereas Table~\ref{tab:main-results-large} reports results on WN18RR, FB15k-237, and NELL-995. The currently available RPCD-GNN entries in both tables are retained only as preliminary single-run evidence and are not used to make final state-of-the-art or statistical claims.
 
-The results on Family are more competitive and saturated. RPCD-GNN obtains the same Hits@1 as DiffusionE and achieves competitive MRR, while RED-GNN obtains the best MRR and Hits@10. This is reasonable because Family is a small relational dataset with relatively regular reasoning patterns, where existing progressive GNN methods can already achieve very high performance. This indicates that RPCD-GNN does not sacrifice performance on relatively regular reasoning datasets, while the improvements on UMLS and WN18RR suggest that relation-phase co-diffusion is more beneficial when relation semantics and multi-hop evidence are more complex. Therefore, the gains over DiffusionE show that relation-level dependency modeling and path-level evidence interaction provide complementary benefits beyond pure entity-level diffusion.
+After the repeated runs are completed, the analysis will answer four questions in sequence: whether RPCD-GNN improves over the entity-diffusion predecessor DiffusionE; whether it remains competitive with independently developed adaptive-propagation methods such as AdaProp and Top-p reasoning; whether the gains are consistent across small and large graphs; and whether any accuracy improvement justifies the additional computational cost. The current highlighting reflects the values displayed in the tables and will be updated together with the absolute and relative improvements after all results have been verified under compatible protocols.
+
+The dataset-level discussion will distinguish saturated benchmarks, such as Family, from datasets with richer relation vocabularies or larger reasoning spaces. Explanations based on relation complexity, multi-hop evidence interaction, or graph scale will be stated only when supported jointly by the final main results, ablations, and efficiency measurements.
 
 \subsection{Ablation Study}\label{subsec:ablation-study}
 
-To further verify the contribution of each component, we design ablation studies by removing or modifying the proposed mechanisms. The first variant removes the query-aware relation co-diffusion module and uses only the base relation embeddings during entity-level diffusion. The second variant removes the phase-interference aggregation module and performs only real-valued weighted message aggregation. The third variant removes both mechanisms, reducing RPCD-GNN to an entity-diffusion-only variant. All variants keep the same training protocol and model configuration, so that the performance changes can be attributed to the corresponding mechanism.
+To test the internal logic of the unified framework, we design ablations at three levels. The first removes query-adaptive relational context and uses only base relation embeddings. The second removes the phase-coherent moment and retains direct evidence accumulation. The third preserves both computations but breaks their coupling by assigning phase from the base relation rather than from the query-adaptive relational context. This decoupled variant directly tests the central claim that one shared relational controller should govern evidence content, relevance, and interaction. Removing both relational adaptation and the coherent moment yields the entity-diffusion backbone. All variants retain the same training protocol and remaining model configuration.
 
 \begin{table*}[t]
-\caption{Ablation analysis of relation co-diffusion and phase-interference aggregation.}
+\caption{Ablation analysis of relational context, phase-coherent evidence, and their coupling. The displayed full-model values are preliminary single-run results; ``--'' denotes a pending controlled run.}
 \label{tab:ablation-modules}
 \centering
 \small
 \setlength{\tabcolsep}{4pt}
-\begin{tabular}{lccrrrrrr}
+\begin{tabular}{lcccrrrrrr}
 \hline
-Variant & RCD & PIMA
+Variant & Context & Coherent & Coupled
 & \multicolumn{2}{c}{Family}
 & \multicolumn{2}{c}{UMLS}
 & \multicolumn{2}{c}{WN18RR} \\
-\cline{4-9}
-& & & MRR & H@10 & MRR & H@10 & MRR & H@10 \\
+\cline{5-10}
+& & & & MRR & H@10 & MRR & H@10 & MRR & H@10 \\
 \hline
-w/o RCD and PIMA & No & No & -- & -- & -- & -- & -- & -- \\
-w/o RCD & No & Yes & -- & -- & -- & -- & -- & -- \\
-w/o PIMA & Yes & No & -- & -- & -- & -- & -- & -- \\
-RPCD-GNN & Yes & Yes & 0.990 & 0.991 & 0.982 & 0.996 & 0.576 & 0.679 \\
+Entity-diffusion backbone & No & No & No & -- & -- & -- & -- & -- & -- \\
+w/o relational context & No & Yes & No & -- & -- & -- & -- & -- & -- \\
+w/o coherent moment & Yes & No & No & -- & -- & -- & -- & -- & -- \\
+w/o relation--phase coupling & Yes & Yes & No & -- & -- & -- & -- & -- & -- \\
+RPCD-GNN & Yes & Yes & Yes & 0.990 & 0.991 & 0.982 & 0.996 & 0.576 & 0.679 \\
 \hline
 \end{tabular}
 \end{table*}
 
-The ablation study is designed to answer two questions. First, whether dynamic relation representations obtained from relation co-diffusion can improve query-aware message propagation. Second, whether phase-interference aggregation can better handle supportive, conflicting, and noisy path evidence than direct real-valued summation. If removing either mechanism leads to performance degradation, it indicates that RCD and PIMA address different but complementary limitations of existing diffusion-based reasoning methods. In particular, the variant without both mechanisms serves as an entity-diffusion reference, while the two single-removal variants are used to measure the individual contribution of RCD and PIMA.
+These comparisons answer progressively stronger questions: whether adaptive relational context is useful, whether relative-phase interactions add information beyond direct summation, and whether conditioning both evidence magnitude and phase on the same relational context is more effective than merely placing the two computations in one model. In particular, a degradation in the decoupled variant would provide direct evidence for the claimed relation--phase coupling rather than only showing that two independently useful mechanisms coexist. Entries marked ``--'' are intentionally left pending until the corresponding controlled experiments are completed; no ablation result is inferred from the full-model scores.
+
+\subsection{Efficiency Analysis}\label{subsec:efficiency-analysis}
+
+We evaluate whether the additional relational controller and phase-coherent moment provide a favorable accuracy--efficiency trade-off. The comparison isolates their incremental costs through four implementations: the entity-diffusion backbone, the backbone with relational context only, the backbone with phase-coherent aggregation only, and the complete RPCD-GNN. All variants use the same dataset split, propagation depth, frontier budget, batch size, and hardware. We report the number of trainable parameters, average training time per epoch, average inference time per query, peak GPU memory, and MRR. Timing is averaged over five consecutive measurements after one warm-up execution, while peak memory is measured within the same evaluation process.
+
+\begin{table*}[t]
+\caption{Efficiency-reporting framework on representative medium- and large-scale datasets. ``--'' denotes a pending measurement under the common configuration.}
+\label{tab:efficiency-analysis}
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{llccccc}
+\hline
+Dataset & Variant & Params. (M) & Train (s/epoch) & Infer. (ms/query) & Peak mem. (GB) & MRR \\
+\hline
+WN18RR & Entity-diffusion backbone & -- & -- & -- & -- & -- \\
+WN18RR & + relational context & -- & -- & -- & -- & -- \\
+WN18RR & + phase-coherent aggregation & -- & -- & -- & -- & -- \\
+WN18RR & RPCD-GNN & -- & -- & -- & -- & -- \\
+\hline
+FB15k-237 & Entity-diffusion backbone & -- & -- & -- & -- & -- \\
+FB15k-237 & + relational context & -- & -- & -- & -- & -- \\
+FB15k-237 & + phase-coherent aggregation & -- & -- & -- & -- & -- \\
+FB15k-237 & RPCD-GNN & -- & -- & -- & -- & -- \\
+\hline
+NELL-995 & Entity-diffusion backbone & -- & -- & -- & -- & -- \\
+NELL-995 & + relational context & -- & -- & -- & -- & -- \\
+NELL-995 & + phase-coherent aggregation & -- & -- & -- & -- & -- \\
+NELL-995 & RPCD-GNN & -- & -- & -- & -- & -- \\
+\hline
+\end{tabular}
+\end{table*}
+
+The final analysis will separate the one-time construction cost of the relation dependency graph from online training and inference costs. It will report both the absolute overhead relative to the entity-diffusion backbone and the accuracy gain per unit of additional time or memory, thereby connecting the empirical measurements in Table~\ref{tab:efficiency-analysis} with the theoretical terms in Eq.~\eqref{eq:computational-complexity}.
 
 \subsection{Parameter Sensitivity Analysis}\label{subsec:parameter-sensitivity}
 
-We analyze the sensitivity of four key hyperparameters introduced by RPCD-GNN across different datasets, as shown in Fig.~\ref{fig:parameter-sensitivity}. These parameters correspond to the two proposed modules. For relation co-diffusion, \texttt{rel\_diff\_weight} controls the fusion strength between base and dynamic relation representations, while \texttt{rel\_line\_topk} controls the number of retained relation neighbors in the relation dependency graph. For phase-interference aggregation, \texttt{phase\_weight} controls the relative contribution of the interference-aware evidence summary to the layer update, while \texttt{phase\_tau} affects the distribution of phase factors.
+The final sensitivity study will vary four key hyperparameters one at a time while holding the remaining validation-selected configuration fixed, as organized in Fig.~\ref{fig:parameter-sensitivity}. These parameters regulate successive stages of the same evidence-evolution process. The relation adaptation weight $\lambda$ (\texttt{rel\_diff\_weight}) controls how strongly dynamic relational context replaces base relation semantics, and the relation-neighbor budget $K_r$ (\texttt{rel\_line\_topk}) controls the sparsity of the structural relation prior. The coherent-moment weight $\eta$ (\texttt{phase\_weight}) controls the contribution of phase-coherent evidence to the unified update, while the phase temperature $\tau_p$ (\texttt{phase\_tau}) controls the dispersion of interaction phases. MRR will be reported on the validation set for every sweep, and the test set will not be used to choose the operating point.
 
 \begin{figure*}[t]
   \centering
+  % TODO(figure polish): The phase contribution weight in the artwork must be
+  % denoted by \eta rather than \beta; \beta is reserved for relation residuals.
+  % TODO(final experiments): Replace the data-free template with validation-MRR
+  % curves generated from the controlled parameter sweeps.
   \includegraphics[width=0.95\textwidth]{figs/parameter-sensitivity.png}
-  \caption{Parameter sensitivity analysis of RPCD-GNN with respect to relation co-diffusion and phase-interference hyperparameters.}
+  \caption{Reporting layout for the sensitivity of the relation adaptation weight $\lambda$, relation-neighbor budget $K_r$, coherent-moment weight $\eta$, and phase temperature $\tau_p$. Validation-MRR curves will be inserted after the controlled sweeps are completed.}
   \label{fig:parameter-sensitivity}
 \end{figure*}
 
-The parameter \texttt{rel\_diff\_weight} reflects the balance between static relation semantics and query-adaptive relation semantics. A small value weakens the effect of relation co-diffusion, while an excessively large value may overemphasize dynamic relation information and introduce noise from the relation dependency graph. The parameter \texttt{rel\_line\_topk} determines the scope of relation-level propagation. Keeping too few relation neighbors may miss useful dependency patterns, whereas retaining too many neighbors may introduce irrelevant relation transitions.
+The parameter $\lambda$ reflects the balance between static relation semantics and query-adaptive relation semantics. A small value weakens contextual adaptation, while an excessively large value may overemphasize dynamic information and introduce noise from the relation graph. The parameter $K_r$ determines the scope of relation-level propagation. Keeping too few relation neighbors may miss useful dependency patterns, whereas retaining too many neighbors may introduce irrelevant structural associations.
 
-For the phase-interference module, \texttt{phase\_weight} determines the contribution of the interference-aware evidence summary to entity-state evolution. A moderate value is expected to achieve a better balance between stable real-valued aggregation and phase-aware path evidence interaction. The parameter \texttt{phase\_tau} controls the sharpness of phase assignment. If the distribution is too sharp or too smooth, the model may fail to distinguish supportive, conflicting, and noisy paths effectively. Overall, the results suggest that moderate relation diffusion strength and phase-interference weight generally lead to better reasoning performance, indicating that both insufficient and excessive relation-phase information may hurt reasoning. The sensitivity analysis also verifies that RPCD-GNN remains stable within reasonable parameter ranges and obtains better performance when relation adaptation and phase-aware evidence aggregation are properly balanced.
+The parameter $\eta$ determines the contribution of the coherent moment inside the unified evidence operator. A moderate value is expected to balance stable direct accumulation with relative-phase interactions. The parameter $\tau_p$ controls the sharpness of phase assignment; an overly concentrated or overly smooth distribution may make evidence interactions insufficiently discriminative. The final discussion will distinguish a broad stable region from an isolated best point and will avoid attributing a trend to the mechanism unless it is consistent across the reported datasets.
+
+\subsection{Noise Robustness}\label{subsec:noise-robustness}
+
+To evaluate whether phase-coherent evidence interaction improves robustness to corrupted structural signals, we will conduct controlled relation-noise experiments on WN18RR and FB15k-237. For each noise ratio in $\{0\%,5\%,10\%,20\%\}$, the relation type of a randomly selected subset of permanent training facts will be replaced by an incorrect relation, while preventing the corrupted triple from matching any known fact. The corrupted permanent facts will be used consistently for both entity message passing and relation-dependency construction, whereas validation and test triples will remain unchanged. DiffusionE, RPCD-GNN without the coherent moment, and the complete RPCD-GNN will be trained and evaluated under identical corruption realizations and backbone configurations. The final report will present test MRR as the mean and standard deviation over three independent runs.
+
+\begin{figure*}[t]
+  \centering
+  % TODO(final experiments): Replace the data-free template with MRR curves
+  % obtained under matched corruption seeds and configurations.
+  \IfFileExists{figs/noise-robustness.png}
+    {\includegraphics[width=0.95\textwidth]{figs/noise-robustness.png}}
+    {\fbox{\parbox[c][55mm][c]{0.9\textwidth}{\centering
+      Noise-robustness figure placeholder\\
+      Upload \texttt{figs/noise-robustness.png}}}}
+  \caption{Reporting layout for robustness to relation corruption on WN18RR and FB15k-237. The final curves will compare DiffusionE, RPCD-GNN without the coherent moment, and the complete RPCD-GNN at matched noise ratios.}
+  \label{fig:noise-robustness}
+\end{figure*}
+
+Fig.~\ref{fig:noise-robustness} fixes the comparison protocol and reporting axes without implying unobserved results. The final analysis will compare both absolute performance and relative degradation from the clean setting, thereby distinguishing general predictive strength from robustness to corrupted relational evidence.
 
 \subsection{Case Study}\label{subsec:case-study}
 
-We further provide qualitative analyses to illustrate the reasoning behavior of RPCD-GNN from two perspectives. First, we visualize the learned relation representations to examine whether query-aware relation co-diffusion produces more discriminative relation semantics. Second, we present a representative reasoning case to show how phase-interference message aggregation distinguishes supportive, weak, and noisy evidence paths during answer prediction.
+The qualitative analysis is organized around two connected stages. First, we visualize the learned relation representations to examine whether query-adaptive context induction produces more discriminative relation semantics. Second, we trace both a successful query and a failure case to show how evidence formed under that context acquires different phases and contributions during candidate-state evolution. The queries will be selected by a fixed confidence-based rule rather than by manual preference.
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=0.9\textwidth]{figs/relation-representation-visualization.png}
-  \caption{Visualization of relation representations learned by DiffusionE and RPCD-GNN.}
+  % TODO(final experiments): Replace the empty UMAP template and metric
+  % placeholders with representations exported under a shared projection.
+  \includegraphics[width=0.95\textwidth]{figs/relation-representation-visualization.png}
+  \caption{Reporting layout for a shared-projection comparison of relation representations learned by DiffusionE and RPCD-GNN. UMAP points and the intra-relation compactness and inter-relation separation statistics will be inserted after representation export.}
   \label{fig:relation-representation}
 \end{figure*}
 
-As shown in Fig.~\ref{fig:relation-representation}, the visualization suggests that the relation representations learned by RPCD-GNN tend to be more compact and separable than those of DiffusionE. This observation indicates that query-aware relation co-diffusion can reorganize relation semantics according to relation-level dependencies, thereby providing more informative relation guidance for subsequent entity-level diffusion reasoning.
+The final interpretation of Fig.~\ref{fig:relation-representation} will compare RPCD-GNN with DiffusionE using both the projected visualization and quantitative intra-relation compactness and inter-relation separation. A claim that query-adaptive context produces more discriminative relation semantics will be made only when the geometric measurements and the visualization agree.
 
 \begin{figure*}[t]
   \centering
+  % TODO(final experiments): Replace the illustrative paths, phases,
+  % contributions, and rank placeholders with model-traced evidence.
   \includegraphics[width=0.95\textwidth]{figs/reasoning-path-case-study.png}
-  \caption{Phase-aware reasoning evidence analysis for a representative query.}
+  \caption{Reporting layout for phase-aware evidence analysis in representative successful and failure cases. The final figure will contain model-traced paths, phases, evidence strengths, contributions, and target-rank changes.}
   \label{fig:reasoning-path-case}
 \end{figure*}
 
-Fig.~\ref{fig:reasoning-path-case} further analyzes the evidence paths for a representative query. Supportive paths that lead to the target answer receive larger amplitude and contribution scores, whereas weak or noisy paths are assigned lower contributions. This case shows that RPCD-GNN does not simply accumulate all multi-hop messages. Instead, the phase-interference aggregation module models the interaction among path messages and suppresses less reliable evidence, which improves both reasoning robustness and interpretability.
+Fig.~\ref{fig:reasoning-path-case} will annotate the top contributing paths, their relation sequences, amplitudes, relative phases, and changes in the target rank. The successful case will test whether mutually consistent evidence is strengthened, while the failure case will expose where noisy or conflicting evidence remains dominant. This paired presentation is intended to explain both the capability and the limitation of the phase-coherent update rather than infer a general mechanism from a single favorable example.
 
 \section{Conclusion}\label{sec:conclusion}
 
-In this paper, we proposed RPCD-GNN, a query-conditioned relation-phase evidence diffusion framework for knowledge graph reasoning. Different from existing diffusion-based methods that mainly focus on entity-level propagation, RPCD-GNN establishes a continuous reasoning process from relational context induction to interference-aware entity-state evolution. Query-adaptive relation states jointly govern the semantic content, propagation strength, and interaction phase of reasoning evidence, thereby connecting relation dependency modeling with multi-path evidence interaction.
+In this paper, we proposed RPCD-GNN, a query-conditioned relation--phase evidence evolution framework for knowledge graph reasoning. RPCD-GNN addresses the separation between relation dependency modeling and multi-path evidence interaction by organizing relational context induction, relation-conditioned evidence construction, and entity-state evolution within a unified reasoning process. In this process, query-adaptive relation states jointly determine the semantic content, propagation strength, and interaction phase of evidence, allowing relational dependencies to regulate how different reasoning paths contribute to candidate prediction.
 
-Within this unified process, relation-phase evidence is propagated from the query entity, interactions among incoming evidence are summarized through real, imaginary, and amplitude components, and the resulting summaries drive multi-layer entity-state evolution for candidate answer prediction. Experimental results on benchmark datasets show that RPCD-GNN achieves competitive or superior performance compared with representative embedding-based, path-based, and GNN-based reasoning methods, especially on datasets with more complex relation semantics and multi-hop evidence. Ablation analysis, parameter sensitivity studies, and qualitative case studies further examine the contribution, stability, and interpretability of the proposed reasoning process.
+Rather than treating path-wise messages as independent contributions, RPCD-GNN summarizes incoming evidence through complementary direct and phase-coherent evidence moments and uses their joint response to drive entity-state evolution across reasoning layers. This formulation represents both the direct accumulation of relational evidence and the structured interaction among converging reasoning paths within a common state-evolution mechanism.
 
-In future work, we will further investigate how relation co-diffusion can be extended to larger-scale and more dynamic knowledge graphs. Another promising direction is to combine phase-aware path aggregation with textual or temporal information, so that the model can handle more complex reasoning scenarios with richer semantic contexts.
+% TODO: Add the final empirical conclusion after completing all experiments.
+
+Future work will extend relational-context induction to larger and dynamically evolving knowledge graphs and incorporate textual or temporal signals into relation--phase evidence evolution, enabling the framework to reason under richer and less stationary semantic contexts.
 
 % Numbered list
 % Use the style of numbering in square brackets.
@@ -793,4 +1010,3 @@ In future work, we will further investigate how relation co-diffusion can be ext
 %\endbio
 
 \end{document}
-
