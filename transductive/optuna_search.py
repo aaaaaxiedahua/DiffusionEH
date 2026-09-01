@@ -484,7 +484,7 @@ def parse_cmd_value(value):
         return value
 
 
-def make_objective(args):
+def make_objective(args, study):
     dataset = dataset_name(args.data_path)
     cwd = str(Path(args.workdir).resolve())
 
@@ -493,13 +493,47 @@ def make_objective(args):
         params = suggest_params(trial, dataset, args.enable_rel_search, args.enable_phase_search)
         trial.set_user_attr("dataset", dataset)
         trial.set_user_attr("params", json.dumps(params, sort_keys=True))
+
+        duplicate_trial = next(
+            (
+                old_trial
+                for old_trial in study.get_trials(deepcopy=False)
+                if old_trial.number != trial.number
+                and old_trial.state
+                in (
+                    optuna.trial.TrialState.FAIL,
+                    optuna.trial.TrialState.PRUNED,
+                )
+                and old_trial.params == trial.params
+            ),
+            None,
+        )
+        if duplicate_trial is not None:
+            trial.set_user_attr("duplicate_of", duplicate_trial.number)
+            print(
+                f"==> Trial {trial.number} duplicates failed/pruned "
+                f"Trial {duplicate_trial.number}; skip it.",
+                flush=True,
+            )
+            raise optuna.TrialPruned(
+                f"Duplicate of failed/pruned Trial {duplicate_trial.number}."
+            )
+
         cmd = build_command(args, params)
         command_str = command_to_string(cmd)
         trial.set_user_attr("command", command_str)
         print(f"\n==> Trial {trial.number} command:")
         print(command_str)
         print("", flush=True)
-        return run_trial_command(cmd, cwd, args.patience, trial)
+        try:
+            return run_trial_command(cmd, cwd, args.patience, trial)
+        except KeyboardInterrupt as exc:
+            trial.set_user_attr("stopped_by_user", True)
+            print(
+                f"\n==> Trial {trial.number} interrupted; continue to next trial.",
+                flush=True,
+            )
+            raise optuna.TrialPruned("Interrupted by user.") from exc
 
     return objective
 
@@ -564,7 +598,12 @@ def main():
     for params in load_initial_params(args.initial_params, args.enqueue_json):
         study.enqueue_trial(params)
 
-    study.optimize(make_objective(args), n_trials=args.n_trials, gc_after_trial=True)
+    study.optimize(
+        make_objective(args, study),
+        n_trials=args.n_trials,
+        gc_after_trial=True,
+        catch=(RuntimeError,),
+    )
 
     print("==> Best value:", study.best_value)
     print("==> Best params:")
