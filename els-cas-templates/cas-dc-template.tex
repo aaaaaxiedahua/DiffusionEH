@@ -142,8 +142,7 @@
 
 % Here goes the abstract
 \begin{abstract}
-Knowledge graph reasoning infers missing facts by aggregating query-relevant evidence over relational structures. Existing progressive graph neural network reasoners primarily optimize where entity states are propagated, while paying less attention to how query-conditioned relational contexts regulate message formation and how incoming messages interact after converging on the same candidate. We propose RPCD-GNN, a query-conditioned progressive reasoning framework that couples relation propagation with complex-domain message interaction. RPCD-GNN constructs a sparsified weighted relation-co-occurrence graph from relation incidences sharing the same entity and employs a unified query-conditioned relational controller to propagate dynamic relational contexts over this graph. The resulting layer-wise relational context serves as a shared control signal that jointly modulates message content, admission strength, and interaction phase. A complex-domain interaction operator complements direct message accumulation with phase-coherent aggregation, preserving additive support while modeling phase-dependent interactions among messages converging at the same candidate. The fused response recurrently updates candidate states across reasoning layers, connecting dynamic relational control and phase-aware message interaction in an end-to-end process. Experiments on five transductive benchmarks, together with ablation studies, relational-context analysis, phase-coherence analysis, and representative case studies, evaluate the effectiveness and internal behavior of RPCD-GNN.
-% TODO: After completing all experiments, replace the final sentence above with the main quantitative result and one mechanism-analysis conclusion.
+Knowledge graph reasoning infers missing facts by aggregating query-relevant evidence over relational structures. An important challenge is to use relational context to coordinate query-relevant message formation and the integration of evidence reaching the same candidate entity. To address this challenge, we propose RPCD-GNN, a progressive reasoning framework that integrates query-conditioned relational control with phase-aware entity reasoning. A relational controller propagates relation states over a fixed, sparsified weighted relation-co-occurrence graph to generate layer-wise relational contexts. These contexts jointly condition message content, admission gates, and interaction phases. A complex-domain operator derives real, imaginary, and coherent-amplitude statistics from gated incoming messages, and fuses their projected response with direct message accumulation to model phase-dependent interactions while retaining additive support. The fused response recurrently updates candidate entity states for answer prediction. Experiments on five benchmark datasets show that RPCD-GNN achieves competitive performance against representative knowledge graph reasoning methods.
 \end{abstract}
 
 % Use if graphical abstract is present
@@ -172,52 +171,66 @@ Knowledge graph reasoning \sep Graph neural networks \sep Query-conditioned rela
 % Main text
 \section{Introduction}\label{sec:introduction}
 
-Knowledge graphs (KGs) represent real-world facts in the form of relational triples, where entities are connected by semantic relations. Since real-world KGs are usually incomplete, knowledge graph reasoning aims to infer missing or implicit facts from observed graph structures and relation semantics. A typical reasoning query can be formulated as $(h_q,r_q,?)$, where the model is expected to predict the answer entity according to the query entity $h_q$, the query relation $r_q$, and the surrounding evidence in the KG. The key challenge of this task lies not only in reaching candidate entities through multi-hop structures, but also in identifying useful relation compositions and reliable path evidence under a specific query. Accordingly, knowledge graph reasoning plays an important role in many knowledge-driven applications, such as question answering, recommender systems, and drug discovery \citep{Ji2022Survey,Cao2019KGRec,Zeng2022DrugDiscovery}.
+Knowledge graphs (KGs) represent real-world facts as relational triples connecting entities through semantic relations. Since real-world KGs are incomplete, knowledge graph reasoning seeks to infer missing facts from observed relational structures, supporting applications such as question answering, recommender systems, and drug discovery \citep{Ji2022Survey,Cao2019KGRec,Zeng2022DrugDiscovery}. This work focuses on entity prediction queries of the form $(h_q,r_q,?)$, where the answer entity is inferred from the query entity, query relation, and available graph evidence \citep{QueryPerspectiveSurvey2025}. Effective multi-hop reasoning requires both identifying query-relevant evidence and integrating messages that reach the same candidate entity.
 
-Existing approaches broadly fall into embedding-based, path- or rule-based, and graph neural network (GNN)-based paradigms. Embedding methods learn compact triple-level scoring functions, whereas path- and rule-based methods derive predictions from explicit relational compositions \citep{Bordes2013TransE,Trouillon2016ComplEx,Sun2019RotatE,Xiong2017DeepPath,Sadeghian2019DRUM}. Although embedding methods are efficient and explicit paths provide interpretable evidence, neither paradigm directly supports adaptive multi-layer propagation over query-relevant subgraph structures. This motivates GNN-based reasoners, which propagate query-dependent states over relational neighborhoods to support multi-hop inference.
+Existing approaches can be broadly grouped into embedding-based, path- or rule-based, and graph neural network (GNN)-based methods. Embedding methods learn compact representations for triple scoring \citep{Bordes2013TransE,Trouillon2016ComplEx,Sun2019RotatE}, while path- and rule-based methods use relational sequences or logical rules to expose explicit reasoning evidence \citep{Xiong2017DeepPath,Sadeghian2019DRUM}. GNN-based models encode relational neighborhoods through message passing, and query-conditioned variants support multi-hop inference by propagating query-specific entity states.
 
-Recent GNN-based reasoners increasingly organize multi-hop inference as query-centered progressive propagation. NBFNet formulates link prediction through generalized Bellman--Ford reasoning, RED-GNN progressively constructs query-dependent relational subgraphs, and AdaProp learns query-adaptive propagation structures \citep{Zhu2021NBFNet,Zhang2022REDGNN,Zhang2023AdaProp}. DiffusionE further reformulates entity-state propagation as a semantics-guided diffusion process, while Top-p reasoning dynamically controls the layer-wise propagation range \citep{Cao2024DiffusionE,Liu2025TopPReasoning}. Within this broad progressive-reasoning paradigm, RPCD-GNN investigates whether query-conditioned relational contexts can jointly regulate message formation and message interaction during recurrent candidate-state updates.
+Query-conditioned graph reasoners have developed along several complementary directions, including query-dependent state propagation, adaptive propagation selection, and richer message representations. NBFNet and RED-GNN support query-dependent propagation and state updates \citep{Zhu2021NBFNet,Zhang2022REDGNN}, while AdaProp and Top-p reasoning adapt the propagation range \citep{Zhang2023AdaProp,Liu2025TopPReasoning}. DiffusionE, HyperKGR, and QAPD explore semantic guidance, hyperbolic representations, and query-conditioned edge competition, respectively \citep{Cao2024DiffusionE,HyperKGR2025,QAPD2026}.
 
-Despite these advances, progressive GNN reasoning remains largely entity-centric. Relation-level graphs and query-conditioned relation representations have been explored in inductive and transfer-oriented reasoning \citep{Geng2023RMPI,Lee2023InGram,Galkin2024ULTRA,Du2026GraphOracle}. However, using a single layer-wise relational context to jointly control message content, admission strength, and interaction phase remains underexplored in transductive progressive reasoning. Meanwhile, conventional aggregators assign weights to individual messages and reduce them additively, without explicitly modeling interactions among messages after they converge on the same candidate. These gaps are closely coupled: relational context governs how each message is formed and admitted, whereas interaction modeling determines how the admitted messages are combined during candidate-state updates. This motivates a unified reasoning process that connects relational context formation, message construction, cross-message interaction, and candidate-state updating.
+Relation-centric reasoning provides another perspective on graph evidence by modeling structural associations among relations. Candidate-local relational contexts, relation-type graphs, and query-conditioned relation representations provide context for entity-level inference \citep{Geng2023RMPI,Lee2023InGram,Galkin2024ULTRA,Du2026GraphOracle}. More recent studies examine relation motifs and rule-derived patterns \citep{MOTIF2025,AdaRPT2025,MPRG2026}.
 
-To address these problems, we propose RPCD-GNN, a query-conditioned progressive reasoning framework that couples a unified relational controller with complex-domain message interaction. RPCD-GNN derives a sparsified weighted relation-co-occurrence graph from relation incidences sharing the same entity. Conditioned on the query relation $r_q$, the controller propagates relation states over this graph to produce layer-wise dynamic relational contexts. These contexts serve as a shared control signal for message content, admission strength, and interaction phase, while the query entity $h_q$ initializes progressive candidate-state propagation. Based on the same context-conditioned gated messages, direct accumulation preserves additive support, whereas phase-coherent aggregation models phase-dependent interactions among messages converging on the same candidate. Their fused response recurrently updates candidate states, connecting dynamic relational control with complex-domain message interaction in a single reasoning process.
+The central issue considered here is how to coordinate relation-level context with the integration of messages converging on the same candidate entity. At the edge level, relational context can guide message content, admission strength, and participation in aggregation. At the candidate level, an explicit interaction statistic can complement direct message accumulation. We investigate a unified mechanism that connects query-conditioned relational control with cross-message aggregation.
+
+To this end, we propose RPCD-GNN, a knowledge graph reasoning framework that integrates query-conditioned relational control with phase-aware message aggregation. A relational controller generates layer-wise contexts over a fixed, sparsified weighted relation-co-occurrence graph, jointly conditioning message content, admission gates, and interaction phases. The aggregation operator combines real and imaginary message aggregates with their coherent amplitude, and fuses their projected response with direct message accumulation to recurrently update candidate entity states for answer ranking.
 
 The main contributions of this paper are summarized as follows:
 \begin{itemize}
-\item We propose RPCD-GNN, a query-conditioned progressive reasoning framework that couples a unified relational controller with complex-domain message interaction. The framework integrates dynamic relational-context induction, gated message formation, phase-coherent aggregation, and recurrent candidate-state updates into an end-to-end reasoning process.
-\item We develop a unified query-conditioned relational controller over a sparsified weighted relation-co-occurrence graph derived from entity-anchored relation co-occurrence statistics. Crucially, the resulting layer-wise relational context serves as a shared control signal that jointly modulates message content, admission strength, and interaction phase throughout progressive reasoning.
-\item We introduce a complex-domain message-interaction operator that complements direct message accumulation with phase-coherent aggregation. By assigning relation-conditioned phases to incoming messages and aggregating their real and imaginary components, the operator exposes pairwise cosine interactions among messages converging at the same candidate entity while preserving their additive support.
+\item We develop a query-conditioned relational controller that generates layer-wise contexts over a sparsified weighted relation-co-occurrence graph. These contexts jointly parameterize message content, admission gates, and interaction phases, enabling relation-level structural information to guide message formation and aggregation.
+\item We introduce a complex-domain message-interaction operator that combines real and imaginary aggregates with their coherent amplitude, and fuses their projected response with direct message accumulation. The coherent amplitude captures relative-phase-dependent interactions among messages converging on the same candidate, while direct accumulation preserves additive message support.
+\item We conduct experiments on five benchmark datasets to evaluate RPCD-GNN against representative reasoning methods. The results demonstrate competitive reasoning performance, and ablation studies further support the effectiveness of the relational controller and phase-aware message aggregation.
 \end{itemize}
 
 \section{Related Work}\label{sec:related-work}
 
-\subsection{Embedding- and Path-based Knowledge Graph Reasoning}\label{subsec:embedding-path-reasoning}
+\subsection{Embedding-, Path-, and Rule-based Knowledge Graph Reasoning}\label{subsec:embedding-path-reasoning}
 
 Embedding-based methods represent entities and relations in continuous spaces and evaluate candidate triples through parameterized scoring functions. Translational models, represented by TransE and TransR, model relations as transformations between entity embeddings, whereas semantic matching methods such as DistMult and TuckER capture relational compatibility through bilinear or tensor operations \citep{Bordes2013TransE,Lin2015TransR,Yang2015DistMult,Balazevic2019TuckER}. Neural scoring models, including ConvE and InteractE, further enhance feature interactions with convolutional architectures \citep{Dettmers2018ConvE,Vashishth2020InteractE}. These methods provide efficient triple-level prediction but do not explicitly expose the multi-hop evidence supporting a candidate answer.
 
-Path- and rule-based methods instead reason through explicit relational compositions. PTransE incorporates relation paths into representation learning, while Path-RNN, DeepPath, and MINERVA encode or search relational paths between query entities \citep{Lin2015PTransE,Das2017PathRNN,Xiong2017DeepPath,Das2018MINERVA}. DRUM learns differentiable logical rules, whereas PathCon combines relational context with paths connecting an entity pair for relation prediction \citep{Sadeghian2019DRUM,Wang2021PathCon}. These approaches make relational compositions more explicit, but primarily focus on path encoding, path search, or rule induction rather than query-conditioned recurrent propagation over dynamically expanded candidate states.
+Path- and rule-based methods instead reason through explicit relational compositions. PTransE incorporates relation paths into representation learning, while Path-RNN, DeepPath, and MINERVA encode relational paths or learn policies for traversing the graph \citep{Lin2015PTransE,Das2017PathRNN,Xiong2017DeepPath,Das2018MINERVA}. DRUM learns differentiable logical rules, whereas PathCon combines relational context with paths connecting an entity pair for relation prediction \citep{Sadeghian2019DRUM,Wang2021PathCon}. Their emphasis on explicit relational compositions provides a complementary perspective to neighborhood-based evidence aggregation.
 
-\subsection{Progressive GNN-based Knowledge Graph Reasoning}\label{subsec:progressive-gnn-reasoning}
+Recent work also connects logical rules with neural propagation. Rule-Guided GNNs incorporate rule guidance into model training and examine the confidence of rules extracted from trained networks \citep{RuleGuidedGNN2025}. This line emphasizes explicit logical constraints and rule-level explanations in graph-based reasoning.
 
-Relational GNNs provide the structural basis for multi-hop knowledge graph reasoning. R-GCN applies relation-specific transformations during neighborhood aggregation, whereas CompGCN jointly composes entity and relation representations \citep{Schlichtkrull2018RGCN,Vashishth2020CompGCN}. More recent reasoners organize inference around query-centered progressive propagation. NBFNet formulates link prediction through generalized Bellman--Ford reasoning, RED-GNN recursively encodes query-dependent relational subgraphs, and AdaProp learns query-adaptive propagation structures \citep{Zhu2021NBFNet,Zhang2022REDGNN,Zhang2023AdaProp}. A*Net learns a query-conditioned priority function to explore selected nodes and edges, while DiffusionE interprets progressive entity-state propagation as a semantics-guided diffusion process \citep{Zhu2023AStarNet,Cao2024DiffusionE}. Top-p reasoning further adapts the layer-wise propagation range through multi-layer Top-p message passing \citep{Liu2025TopPReasoning}.
+\subsection{Graph-based Knowledge Graph Reasoning}\label{subsec:progressive-gnn-reasoning}
 
-Beyond progressive GNNs, KnowFormer explores structure-aware Transformer attention and relational message passing as an alternative paradigm for knowledge graph reasoning \citep{Liu2024KnowFormer}. Although these methods differ in architecture, they mainly investigate how to organize query-centered propagation, select relevant reasoning structures, and extend the effective receptive field. Within this line, DiffusionE models semantic interactions among the source entity, propagation relation, and query relation within each edge message, while messages arriving at the same target are subsequently aggregated additively. RPCD-GNN advances this line by using layer-wise query-conditioned relational contexts to jointly regulate message formation, admission strength, and phase-aware interactions among co-arriving messages during recurrent candidate-state evolution.
+Relational GNNs encode multi-relational neighborhoods through message passing. R-GCN applies relation-specific transformations during neighborhood aggregation, whereas CompGCN jointly composes entity and relation representations \citep{Schlichtkrull2018RGCN,Vashishth2020CompGCN}. Recent relational encoders further refine neighborhood information: AdaGCN adaptively aggregates or separates neighbor features \citep{AdaGCN2025}, while HIGSM combines hierarchical and inter-layer encoding in a modular graph self-attention architecture \citep{HIGSM2025}.
+
+Query-conditioned reasoners use graph propagation to integrate multi-hop evidence for each query. NBFNet formulates link prediction through generalized Bellman--Ford reasoning, and RED-GNN recursively encodes query-dependent relational subgraphs \citep{Zhu2021NBFNet,Zhang2022REDGNN}. AdaProp learns query-adaptive propagation structures, while A*Net uses a learned query-conditioned priority function to explore selected nodes and edges \citep{Zhang2023AdaProp,Zhu2023AStarNet}. Top-p reasoning adapts the layer-wise propagation range through multi-layer Top-p message passing \citep{Liu2025TopPReasoning}. DiffusionE interprets entity-state propagation as a semantics-guided diffusion process \citep{Cao2024DiffusionE}.
+
+Query-dependent GNN reasoning has also advanced in representation geometry and propagation conditioning. HyperKGR embeds recursive reasoning trees in hyperbolic space to obtain query-specific representations \citep{HyperKGR2025}. QAPD introduces query-conditioned edge competition, adaptive cross-layer fusion, and relation-pattern-aware decoding for entity-inductive reasoning \citep{QAPD2026}.
+
+Beyond progressive GNNs, KnowFormer explores structure-aware Transformer attention and relational message passing as an alternative paradigm for knowledge graph reasoning \citep{Liu2024KnowFormer}. Together, these studies examine how relational encoding, propagation selection, representation geometry, and attention mechanisms shape query-dependent graph reasoning.
 
 \subsection{Relation-centric Structural Modeling}\label{subsec:relation-centric-modeling}
 
 Relation-centric reasoning methods operate at different structural granularities. ConGLR augments a candidate-specific enclosing subgraph with a heterogeneous context graph for inductive relation prediction, whereas RMPI transforms a candidate-local subgraph into a line-graph-style relation-instance view and performs target-relation-guided message passing for fully inductive reasoning \citep{Lin2022ConGLR,Geng2023RMPI}. These methods construct local relational contexts for individual candidate triples rather than a graph-level topology over relation types.
 
-Other approaches explicitly build graph-level structures among relation types. InGram derives a weighted relation graph from shared-head and shared-tail incidences and uses it to generate representations for entities and relations unseen during training \citep{Lee2023InGram}. ULTRA defines four endpoint-sharing interaction types among relations and marks the query relation to obtain query-conditioned relation representations for a subsequent entity-level GNN \citep{Galkin2024ULTRA}. GraphOracle instead propagates query-conditioned relation states over a directed relation-dependency graph induced by consecutive relation pairs, combined with sequential multi-dataset pre-training and target-graph adaptation \citep{Du2026GraphOracle}.
+Other approaches explicitly build graph-level structures among relation types. InGram derives a weighted relation graph from shared-head and shared-tail incidences and uses it to generate representations for entities and relations unseen during training \citep{Lee2023InGram}. ULTRA defines four endpoint-sharing interaction types among relations and marks the query relation to obtain query-conditioned relation representations for a subsequent entity-level GNN \citep{Galkin2024ULTRA}. GraphOracle propagates query-conditioned relation states over a directed relation-dependency graph induced by consecutive relation pairs \citep{Du2026GraphOracle}.
 
-These studies establish relation graphs and query-conditioned relation representations as prior design choices. RPCD-GNN differs in how relational context is integrated into transductive progressive reasoning. It constructs a fixed sparsified weighted relation-co-occurrence topology from relation incidences sharing the same entity and generates layer-wise query-conditioned relation states over this topology. More importantly, the same dynamic relational context jointly regulates message content, admission strength, and interaction phase. The resulting phase-coherent response is fused with direct additive aggregation before recurrent candidate-state updating, making relational context a shared controller of both message formation and cross-message interaction.
+Recent work expands the structural information used in relation representations. MOTIF analyzes how relation motifs affect the expressive power of knowledge graph foundation models \citep{MOTIF2025}. AdaRPT combines rule-derived and co-occurrence relation features with transferable path features for entities \citep{AdaRPT2025}. MPRG constructs a relation graph from mined logical patterns and uses the resulting relation representations to guide entity-level reasoning \citep{MPRG2026}.
+
+Transfer-oriented approaches also study how graph structure supports generalization. TRIX uses more expressive triplet representations for zero-shot entity and relation prediction \citep{TRIX2025}, while Flock encodes sampled random walks as sequences and pools node and relation representations for zero-shot link prediction \citep{Flock2026}.
+
+These approaches differ in the relational structures they encode and the ways their representations support entity-level inference. RPCD-GNN uses layer-wise query-conditioned relation contexts as shared conditioning signals for message content, admission gates, and interaction phases, connecting relational structural modeling with message aggregation.
 
 \subsection{Complex-Domain Representations and Message Interaction}\label{subsec:complex-message-interaction}
 
 Complex-domain representations have been widely studied in knowledge graph embedding. ComplEx employs complex bilinear scoring to capture symmetric and asymmetric relations, RotatE represents each relation as an element-wise rotation in the complex plane, and QuatE uses quaternion embeddings and Hamilton products to model richer relational patterns \citep{Trouillon2016ComplEx,Sun2019RotatE,Zhang2019QuatE}. In these approaches, complex or hypercomplex components primarily define entity--relation transformations and triple-scoring geometry.
 
-Complex values have also been introduced into graph neural networks. MagNet constructs a complex Hermitian magnetic Laplacian whose magnitude represents undirected graph structure and whose phase encodes edge direction, enabling complex spectral convolution over directed graphs \citep{Zhang2021MagNet}. Its phase is determined by graph directionality and defines a graph propagation operator, rather than a query-conditioned interaction coordinate among messages arriving at the same knowledge graph candidate.
+Complex values have also been introduced into graph neural networks. MagNet constructs a complex Hermitian magnetic Laplacian whose magnitude represents undirected graph structure and whose phase encodes edge direction, enabling complex spectral convolution over directed graphs \citep{Zhang2021MagNet}.
 
-Attention-based GNNs such as GAT and KBGAT compute edge-wise compatibility scores, normalize them over a neighborhood, and aggregate the corresponding messages through a weighted sum \citep{Velickovic2018GAT,Nathani2019KBGAT}. Neighborhood normalization couples the attention coefficients through competition, but the resulting additive reducer does not explicitly contain pairwise compatibility terms between incoming message values. RPCD-GNN instead assigns a context-dependent phase to each gated message according to the source state, dynamic relational context, and query relation. Phase-coherent aggregation introduces relative-phase-dependent interactions among messages converging on the same candidate and is subsequently fused with direct message accumulation. RPCD-GNN is not a fully complex-valued GNN: its entity states, relation states, recurrent updates, and answer scores remain real-valued, while the real, imaginary, and amplitude components serve as intermediate interaction statistics.
+Attention-based GNNs such as GAT and KBGAT compute edge-wise compatibility scores, normalize them over a neighborhood, and aggregate the corresponding messages through a weighted sum \citep{Velickovic2018GAT,Nathani2019KBGAT}. Neighborhood normalization couples the attention coefficients through competition.
+
+RPCD-GNN learns a phase for each gated message from the source state, relational context, and query relation. The resulting real and imaginary aggregates and coherent amplitude form intermediate statistics for message aggregation. The coherent amplitude captures relative-phase-dependent cross terms among messages reaching the same candidate. The projected response of all three statistics is fused with direct message accumulation, connecting context-dependent phase interactions with additive message support.
 
 \section{Methodology}\label{sec:methodology}
 
@@ -232,7 +245,11 @@ score(h_q,r_q,e).
 \label{eq:reasoning-task}
 \end{equation}
 
-The main notation used in the model is summarized in Table~\ref{tbl:notations}. The construction of $\mathcal{T}_{g}$ under the training, validation, and test protocols is specified in Section~\ref{subsec:implementation-details}.
+Let $\mathcal{T}_{f}$ denote the fixed fact set used to construct relation-co-occurrence associations. The resulting relation topology is shared across queries, while $\mathcal{T}_{g}$ specifies the facts available for entity propagation under each experimental protocol. These graph constructions are detailed in Section~\ref{subsec:implementation-details}.
+
+Entity states, messages, and relation representations lie in $\mathbb{R}^{d}$; relation-attention, admission, and phase encoders use hidden width $a$. The query vector $\mathbf{r}_{q}^{(l)}=\mathbf{r}_{r_q}^{(l)}$ is the layer-specific base embedding of the query relation. Reasoning starts from $\mathcal{V}^{(0)}=\{h_q\}$ with $\mathbf{h}_{h_q}^{(0,q)}=\mathbf{0}$. Base relation embeddings and entity-level message, admission, phase, and selection parameters are layer-specific; relational-controller and GRU parameters are shared across reasoning layers. Layer indices on trainable parameters and bias terms are omitted in the equations for readability.
+
+We use ReLU in the relation-attention, message, admission, and phase encoders. The symbol $\phi$ denotes the dataset-specific post-aggregation activation, while sigmoid and $\tanh$ are used for admission and phase assignment. Temperatures are positive, $\epsilon>0$ denotes a numerical stabilizer, and $\beta,\lambda\in[0,1]$ control relation-state mixing. The main notation is summarized in Table~\ref{tbl:notations}.
 
 \begin{table*}[width=\FullWidth,cols=2,pos=t]
 \caption{Definitions of the main notations.}\label{tbl:notations}
@@ -240,7 +257,7 @@ The main notation used in the model is summarized in Table~\ref{tbl:notations}. 
 \toprule
 Notation & Definition \\
 \midrule
-$\mathcal{G}_{g},\mathcal{E},\mathcal{R},\mathcal{T}_{g}$ & Observed reasoning graph, entities, relations, and available facts \\
+$\mathcal{G}_{g},\mathcal{E},\mathcal{R},\mathcal{T}_{g},\mathcal{T}_{f}$ & Reasoning graph, entities, relations, available facts, and fixed facts for relation co-occurrence \\
 $\mathcal{R}'$ & Effective relation vocabulary with inverse and identity relations \\
 $q=(h_q,r_q)$ & Query entity--relation pair \\
 $\mathcal{V}^{(l)},\overline{\mathcal{V}}^{(l)},\mathcal{C}^{(l)},\mathcal{E}^{(l)},\mathcal{E}_{v}^{(l)}$ & Retained and provisional entities, new candidates, expanded edges, and incoming edges of $v$ \\
@@ -251,8 +268,8 @@ $C_{ij},\bar{\pi}_{ij},\omega_{ij}$ & Relation co-occurrence count, normalized a
 $\mathbf{r}_{i}^{(l)},\mathbf{r}_{i}^{(l,s,q)},\tilde{\mathbf{r}}_{i}^{(l,q)}$ & Base, query-conditioned intermediate, and fused relation states \\
 $\mathcal{X}_{v}^{(l,q)},\mathbf{m}_{u,r,v}^{(l,q)},\gamma_{u,r,v}^{(l,q)},\mathbf{x}_{u,r,v}^{(l,q)}$ & Incoming message set, semantic message, admission gate, and gated message \\
 $\theta_{u,r}^{(l,q)},\mathbf{z}_{u,r,v}^{(l,q)}$ & Message phase and phase-encoded message \\
-$\boldsymbol{\mu}_{v}^{(l,q)},\boldsymbol{\kappa}_{v}^{(l,q)},\boldsymbol{\rho}_{v}^{(l,q)}$ & Direct message aggregate, phase-coherent message aggregate, and coherent amplitude \\
-$L,J$ & Entity reasoning layers and inner relation-propagation steps \\
+$\boldsymbol{\mu}_{v}^{(l,q)},\boldsymbol{\kappa}_{v}^{(l,q)},\boldsymbol{\rho}_{v}^{(l,q)}$ & Direct message aggregate, phase-coherent message aggregate, and stabilized coherent amplitude \\
+$d,a,L,J$ & Hidden and attention dimensions, entity reasoning layers, and inner relation steps \\
 $K_r,\delta_r,K_l$ & Relation-neighbor budget, relation threshold, and layer-wise retention budget \\
 $\lambda,\beta,\eta$ & Relation fusion, relation residual, and phase-aware aggregation weights \\
 $\tau_r,\tau_p,\tau$ & Relation, phase, and candidate-selection temperatures \\
@@ -262,27 +279,22 @@ $\tau_r,\tau_p,\tau$ & Relation, phase, and candidate-selection temperatures \\
 
 \subsection{Model Overview}\label{subsec:overall-framework}
 
-For a query $q=(h_q,r_q)$, the query entity $h_q$ initializes progressive candidate-state evolution, whereas the query relation $r_q$ conditions relation propagation. RPCD-GNN then performs an $L$-layer reasoning process that connects query-conditioned relational context with phase-aware message aggregation. At layer $l$, $\mathbf{h}_{v}^{(l,q)}$ denotes the query-dependent state of entity $v$, and $\widetilde{\mathbf{R}}^{(l,q)}$ denotes the relational context activated by $r_q$.
+Figure~\ref{fig:framework} presents RPCD-GNN as a relational controller coupled with phase-aware entity reasoning. Given $q=(h_q,r_q)$, the query entity initializes entity propagation and the query relation conditions the controller. At layer $l$, the controller generates $\widetilde{\mathbf{R}}^{(l,q)}\in\mathbb{R}^{|\mathcal{R}'|\times d}$ by stacking the fused relation states. This context jointly controls message content, admission gates, and interaction phases.
 
-Each reasoning layer contains three causally connected stages. First, the query relation activates a reusable relation-co-occurrence structure and propagates query-conditioned relational context over it. Second, this shared context jointly conditions the message content, admission gate, and interaction phase of every edge-level message. Third, direct and phase-coherent aggregates derived from the same incoming message set are integrated by a unified aggregation operator to update candidate states. Thus, direct accumulation and phase-dependent interaction provide complementary statistics within one state-evolution process rather than independent prediction branches.
-
-After $L$ layers, the evolved entity states are projected to the global candidate space for answer ranking. Fig.~\ref{fig:framework} gives an overview. Sections~\ref{subsec:relation-codiffusion}--\ref{subsec:model-training} instantiate the three operators and the learning objective. For readability, the query superscript is omitted below when it is unambiguous.
+Messages reaching the same candidate are summarized by direct accumulation and complex-domain statistics. Their projected responses are fused into a provisional candidate state, followed by candidate retention and a recurrent state update. The process repeats for $L$ layers, with relational contexts recomputed at each layer, and the final states are scored for answer ranking. The figure uses $h$ and $r$ for $h_q$ and $r_q$. Sections~\ref{subsec:relation-codiffusion}--\ref{subsec:model-training} define the component computations. For readability, the query superscript is omitted below when unambiguous.
 
 \begin{figure*}[t]
   \centering
-  % TODO(figure polish): Align the candidate-state and message-aggregate symbols
-  % with \mathbf{h}_{v}^{(l,q)}, \boldsymbol{\mu}_{v}^{(l,q)}, and
-  % \boldsymbol{\kappa}_{v}^{(l,q)} in the final artwork.
-  \includegraphics[width=\textwidth]{figs/rpcd-gnn-framework.png}
-  \caption{Overview of RPCD-GNN. A query activates a reusable relation co-occurrence structure to propagate a shared relational controller, which jointly conditions message content, admission gating, and interaction phase. Direct and phase-coherent message aggregates are then integrated within each recurrent reasoning layer before candidate ranking.}
+  \includegraphics[width=\textwidth]{figs/Query-conditioned relational controller.pdf}
+  \caption{Overview of RPCD-GNN. The input graph and query $(h,r,?)$ are shown on the left. The upper component constructs a relation-co-occurrence graph and propagates query-conditioned relation states to produce layer-wise contexts. These contexts jointly control message content, admission gating, and interaction phase in the lower entity-reasoning component. Direct accumulation and phase-coherent aggregation summarize the same incoming messages, and their fused response recurrently updates entity states. After $L$ reasoning layers, the scoring stage on the right ranks candidate entities and predicts $\hat{t}$.}
   \label{fig:framework}
 \end{figure*}
 
 \subsection{Query-Conditioned Relational Context}\label{subsec:relation-codiffusion}
 
-The effective relation identifier space is defined as $\mathcal{R}'=\mathcal{R}\cup\mathcal{R}^{-1}\cup\{r_{\mathrm{id}}\}$. The entity propagation graph is augmented with inverse edges and identity self-loops to support directional and self-preserving message propagation. For the relation-context graph, inverse relation incidences are included according to the reported experimental configuration. RPCD-GNN constructs a sparsified weighted relation-co-occurrence graph $\mathcal{G}_{r}=(\mathcal{R}',\mathcal{E}_{r})$ from recurring local relation co-occurrence patterns in a fixed fact graph. The graph encodes reusable structural associations among relations and is shared across queries, whereas its activations are dynamically conditioned on the query relation at each reasoning layer.
+The effective relation identifier space is $\mathcal{R}'=\mathcal{R}\cup\mathcal{R}^{-1}\cup\{r_{\mathrm{id}}\}$. The entity propagation graph is augmented with inverse edges and identity self-loops. RPCD-GNN constructs a sparsified weighted relation-co-occurrence graph $\mathcal{G}_{r}=(\mathcal{R}',\mathcal{E}_{r})$ from the fixed facts $\mathcal{T}_{f}$. Inverse relation incidences are included in this construction according to the reported configuration. The topology and structural weights remain fixed, while relation states are conditioned on the query at each reasoning layer.
 
-Let $\mathcal{A}_e$ denote the multiset of direction-aware relation incidences at entity $e$ in this fixed graph, where inverse relation types distinguish incoming from outgoing incidences and $n_e(r)$ records the multiplicity of relation $r$. Relation associations are counted between relation types sharing an anchor entity, considering only anchors that contain more than one relation incidence:
+Let $\mathcal{A}_e$ denote the multiset of direction-aware relation incidences at entity $e$ induced by $\mathcal{T}_{f}$, where inverse types distinguish incoming from outgoing incidences and $n_e(r)$ records the multiplicity of relation $r$. Associations are counted between relation types sharing an anchor entity with more than one incidence:
 \begin{equation}
 \begin{aligned}
 C_{ij}
@@ -325,9 +337,9 @@ An identity self-loop is included for every effective relation type, so $\mathca
 \end{cases}
 \label{eq:relation-edge-weight}
 \end{equation}
-Here, $\bar{\pi}_{ij}$ is a normalized structural association rather than a deterministic logical transition probability: it reflects how frequently $r_i$ and $r_j$ participate in recurring direction-aware local association patterns, but it does not imply that one relation logically entails the other. Directionality in entity propagation is represented by distinct inverse relation types. Whether inverse incidences participate in relation co-occurrence construction is controlled separately by the relation-context configuration. We use $\mathcal{N}_{r}(i)$ to denote the retained neighbors of receiving relation $r_i$ in $\mathcal{G}_{r}$.
+The normalized weights $\bar{\pi}_{ij}$ describe statistical associations between relation incidences and do not imply logical entailment. The receiving neighborhood is $\mathcal{N}_{r}(i)=\mathcal{S}_{i}\cup\{i\}$, including the selected structural neighbors and the identity self-loop.
 
-We use $\operatorname{ReLU}(\cdot)$ in relation scoring and in the hidden encoders for message content, admission, and phase assignment. The symbol $\phi(\cdot)$ denotes the dataset-specific post-aggregation activation used in relation-state and candidate-state updates. We use $\operatorname{sigmoid}(\cdot)$ for message admission, $\tanh(\cdot)$ to bound the interaction phase, and $\epsilon>0$ for numerical stability. At entity reasoning layer $l$, query-conditioned relation propagation starts from the layer-specific base relation representations, i.e., $\mathbf{r}_{i}^{(l,0,q)}=\mathbf{r}_{i}^{(l)}$. For inner step $s=1,\ldots,J$ and relation edge $(r_i,r_j)\in\mathcal{E}_{r}$, the query-relation-conditioned activation is
+At entity reasoning layer $l$, relation propagation starts from the layer-specific base representations, $\mathbf{r}_{i}^{(l,0,q)}=\mathbf{r}_{i}^{(l)}$. For inner step $s=1,\ldots,J$ and relation edge $(r_i,r_j)\in\mathcal{E}_{r}$, the query-conditioned activation is
 \begin{equation}
 \begin{split}
 a_{ij}^{(l,s,q)}
@@ -376,19 +388,21 @@ After $J$ inner steps, the query-conditioned state is fused with the base relati
 \lambda\mathbf{r}_{i}^{(l,J,q)}.
 \label{eq:fused-relational-context}
 \end{equation}
-Here, $\beta$ preserves the base relation semantics throughout inner propagation, while $\lambda$ controls how strongly the resulting query-conditioned context adapts the base relation state.
-Thus, the fixed graph contributes a reusable structural substrate, whereas its activation is recomputed for every query relation and reasoning layer. The resulting relational context provides a shared conditioning signal for message content, admission gating, and phase in the subsequent entity-level update. The relation-co-occurrence graph is local in construction but global in use: it is distilled from reusable local relation patterns, while its query-relation-conditioned activations regulate message interaction throughout multi-hop reasoning.
+Here, $\beta$ retains a contribution from the base relation state during inner propagation, while $\lambda$ controls its final mixture with the query-conditioned state.
+The fused context $\tilde{\mathbf{r}}_{i}^{(l,q)}$ supplies a shared conditioning signal for message content, admission gating, and phase assignment in the subsequent entity update.
+
+Figure~\ref{fig:relation-codiffusion} illustrates successive inner steps: $r_3$ receives messages from $r_1$ and $r_2$ through $\alpha_{31}$ and $\alpha_{32}$, and its updated state contributes to $r_5$ through $\alpha_{53}$. The indices in $\alpha_{ij}$ denote receiving relation $r_i$ and sending relation $r_j$; other superscripts are omitted for readability. The highlighted routes are schematic, while each update aggregates all retained neighbors for the configured $J$ steps.
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=\textwidth]{figs/relation-codiffusion.png}
-  \caption{Construction and query-specific activation of the relational context. Direction-aware incidences extracted from the fixed fact graph define normalized structural associations, which are sparsified by retaining the highest-weight associations for each receiving relation and selectively activated by the query relation at each reasoning layer.}
+  \includegraphics[width=\textwidth,trim=13.5bp 208.5bp 75.5bp 136bp,clip]{figs/relation-graph.pdf}
+  \caption{Query-conditioned propagation on a fixed relation-co-occurrence graph. The successive snapshots show the structural topology, message aggregation into $r_3$, and subsequent propagation to $r_5$. Blue edges denote attention-weighted relation messages, orange dashed arrows indicate query conditioning, and the large arrows connect successive inner steps. Pale blue edges retain earlier highlighted routes as visual context. Only example message routes are highlighted; self-loops are omitted for clarity.}
   \label{fig:relation-codiffusion}
 \end{figure*}
 
 \subsection{Query-Conditioned Message Formation}\label{subsec:entity-diffusion}
 
-Starting from $\mathcal{V}^{(0)}=\{h_q\}$, RPCD-GNN expands the outgoing edges of the layer-wise retained entity set $\mathcal{V}^{(l-1)}$ over $\mathcal{T}_{g}$. The reached entities constitute a provisional set $\overline{\mathcal{V}}^{(l)}$, and the entities reached in the current expansion that are not already retained in $\mathcal{V}^{(l-1)}$ form the candidate set $\mathcal{C}^{(l)}$. An entity discarded at an earlier layer is not permanently excluded and may re-enter if it is reached again in a later expansion. For a provisional target $v$, let $\mathcal{E}_{v}^{(l)}$ denote its incoming expanded edges. The message carried by an edge $(u,r,v)$ is
+At layer $l$, RPCD-GNN expands the outgoing edges of the retained entity set $\mathcal{V}^{(l-1)}$ in the augmented entity propagation graph. The expanded edges form $\mathcal{E}^{(l)}$, and their targets constitute the provisional set $\overline{\mathcal{V}}^{(l)}$. Newly reached candidates are $\mathcal{C}^{(l)}=\overline{\mathcal{V}}^{(l)}\setminus\mathcal{V}^{(l-1)}$. An entity discarded earlier may re-enter if reached again. For a provisional target $v$, let $\mathcal{E}_{v}^{(l)}$ denote its incoming expanded edges. The message on $(u,r,v)$ uses a query-aware difference composition \citep{Cao2024DiffusionE}:
 \begin{equation}
 \mathbf{m}_{u,r,v}^{(l)}
 =
@@ -409,7 +423,7 @@ W_{q}^{m}
 \right).
 \label{eq:semantic-evidence-message}
 \end{equation}
-This contrastive composition measures the compatibility gap between the propagation relation and the query relation in the current source state. Its admission coefficient is
+This difference-based composition combines propagation-relation-conditioned and query-conditioned source features through separate learned projections. The relational context participates directly in message construction. An admission gate controls the strength of the resulting message:
 \begin{equation}
 \gamma_{u,r,v}^{(l)}
 =
@@ -435,7 +449,11 @@ The gated message is then
 \end{equation}
 Here, $\gamma_{u,r,v}^{(l)}$ controls how much message content is admitted into subsequent interaction. Since $\mathbf{m}_{u,r,v}^{(l)}$ is produced by ReLU and $\gamma_{u,r,v}^{(l)}\in(0,1)$, the gated message $\mathbf{x}_{u,r,v}^{(l)}$ is element-wise nonnegative.
 
-To make the interaction among concurrently arriving messages explicitly learnable, the same source state, relational context, and query relation parameterize a message phase:
+\subsection{Phase-Aware Message Aggregation}\label{subsec:phase-interference}
+
+\subsubsection{Phase Encoding and Message Aggregation}
+
+For each gated message, we learn an interaction phase from the source state, relational context, and query relation:
 \begin{equation}
 \begin{split}
 \theta_{u,r}^{(l)}
@@ -468,11 +486,7 @@ The resulting phase-encoded message is
 \label{eq:complex-relation-phase-evidence}
 \end{equation}
 Here, $\theta_{u,r}^{(l)}$ is a scalar phase assigned to each edge-level message and broadcast across its hidden dimensions, with $\theta_{u,r}^{(l)}\in(-\pi,\pi)$. The complex notation is used as an intermediate interaction representation; entity states, relation states, recurrent updates, and answer scores remain real-valued.
-Equations~\eqref{eq:weighted-relation-evidence} and~\eqref{eq:complex-relation-phase-evidence} show that magnitude and phase are not produced by unrelated components. Both are query-relation-conditioned views of a single message: $\mathbf{x}$ captures its gated content, while $\theta$ specifies how that content interacts with other messages reaching the same candidate.
-
-\subsection{Phase-Aware Message Aggregation}\label{subsec:phase-interference}
-
-\subsubsection{Direct and Phase-Coherent Message Aggregation}
+The gated content $\mathbf{x}$ and phase $\theta$ share the same source-state, relational-context, and query-relation inputs. The content carries the admitted message features, while the phase parameterizes their interaction during aggregation.
 
 Let $\mathcal{X}_{v}^{(l)}$ collect the gated messages and phases carried by all edges in $\mathcal{E}_{v}^{(l)}$. The direct message aggregate retains the accumulated real-valued message content:
 \begin{equation}
@@ -482,45 +496,35 @@ Let $\mathcal{X}_{v}^{(l)}$ collect the gated messages and phases carried by all
 \mathbf{x}_{u,r,v}^{(l)}.
 \label{eq:direct-evidence-moment}
 \end{equation}
-The phase-coherent message aggregate and its element-wise amplitude are
+The phase-coherent aggregate is computed through real and imaginary components, together with a numerically stabilized element-wise amplitude:
 \begin{equation}
 \begin{aligned}
 \boldsymbol{\kappa}_{v}^{(l)}
-&=
-\sum_{(u,r,v)\in\mathcal{E}_{v}^{(l)}}
-\mathbf{z}_{u,r,v}^{(l)}
-=
+&=\sum_{(u,r,v)\in\mathcal{E}_{v}^{(l)}}\mathbf{z}_{u,r,v}^{(l)}\\
+&=\mathbf{M}_{v}^{re,(l)}+\mathrm{i}\mathbf{M}_{v}^{im,(l)},\\
 \mathbf{M}_{v}^{re,(l)}
-+
-\mathrm{i}\mathbf{M}_{v}^{im,(l)},\\
+&=\sum_{(u,r,v)\in\mathcal{E}_{v}^{(l)}}
+\mathbf{x}_{u,r,v}^{(l)}\cos\theta_{u,r}^{(l)},\\
+\mathbf{M}_{v}^{im,(l)}
+&=\sum_{(u,r,v)\in\mathcal{E}_{v}^{(l)}}
+\mathbf{x}_{u,r,v}^{(l)}\sin\theta_{u,r}^{(l)},\\
 \boldsymbol{\rho}_{v}^{(l)}
-&=
-\left|
-\boldsymbol{\kappa}_{v}^{(l)}
-\right|
-=
-\sqrt{
-\left(\mathbf{M}_{v}^{re,(l)}\right)^2
-+
-\left(\mathbf{M}_{v}^{im,(l)}\right)^2
-+
-\epsilon
-}.
+&=\sqrt{\left|\boldsymbol{\kappa}_{v}^{(l)}\right|^2+\epsilon}\\
+&=\sqrt{\left(\mathbf{M}_{v}^{re,(l)}\right)^2
++\left(\mathbf{M}_{v}^{im,(l)}\right)^2+\epsilon}.
 \end{aligned}
 \label{eq:coherent-evidence-moment}
 \end{equation}
-All squared, square-root, and absolute-value operations in Eq.~\eqref{eq:coherent-evidence-moment} are applied element-wise.
+The modulus, square, and square root in Eq.~\eqref{eq:coherent-evidence-moment} act element-wise. The stabilizer regularizes amplitude computation; the following identity concerns the unstabilized squared modulus.
 
-The mathematical role of phase becomes clear by considering dimension $d$ of the coherent aggregate:
+Index incoming edges by $i$, with gated-message component $x_{i,k}$ and phase $\theta_i$. For hidden coordinate $k$, the coherent aggregate satisfies
 \begin{equation}
-\left|
-\kappa_{v,d}^{(l)}
-\right|^2
+\left|\kappa_{v,k}^{(l)}\right|^2
 =
-\sum_i x_{i,d}^{2}
+\sum_i x_{i,k}^{2}
 +
 2\sum_{i<j}
-x_{i,d}x_{j,d}
+x_{i,k}x_{j,k}
 \cos\left(\theta_i-\theta_j\right).
 \label{eq:phase-dependent-interaction}
 \end{equation}
@@ -529,7 +533,7 @@ The cross terms depend on relative phase. Aligned messages contribute positively
 The two message aggregates are integrated by a unified phase-aware message aggregation operator:
 \begin{equation}
 \begin{split}
-\mathcal{U}_{\mathrm{RPE}}
+\mathcal{U}_{\mathrm{phase}}
 \left(\mathcal{X}_{v}^{(l)}\right)
 =\;&
 \phi\left(
@@ -549,11 +553,11 @@ W_{\rho}\boldsymbol{\rho}_{v}^{(l)}
 \end{split}
 \label{eq:unified-relation-phase-operator}
 \end{equation}
-Both aggregates are computed from the same relation-conditioned incoming message set and jointly parameterize a single candidate-state update. The direct aggregate preserves accumulated message content, whereas the coherent aggregate retains phase-dependent interaction structure. Their additive projections therefore represent complementary statistics within one phase-aware message aggregation operator.
+The direct aggregate retains additive message content, while the real, imaginary, and coherent-amplitude statistics encode phase-dependent aggregation information. Their projected responses are fused to form the provisional candidate state.
 
 \subsubsection{Candidate Retention and Recurrent State Update}
 
-Before recurrent evolution, RPCD-GNN limits the number of newly retained entities to prevent exponential growth of the reasoning set. For each provisional entity $v$, the unified operator output is used as its provisional state $\widehat{\mathbf{h}}_{v}^{(l)}=\mathcal{U}_{\mathrm{RPE}}(\mathcal{X}_{v}^{(l)})$. A candidate is scored by
+Before the recurrent update, RPCD-GNN bounds the number of newly retained entities. The provisional state is $\widehat{\mathbf{h}}_{v}^{(l)}=\mathcal{U}_{\mathrm{phase}}(\mathcal{X}_{v}^{(l)})$. Each new candidate is scored by
 \begin{equation}
 s_{v}^{(l)}
 =
@@ -561,20 +565,20 @@ s_{v}^{(l)}
 \widehat{\mathbf{h}}_{v}^{(l)}.
 \label{eq:candidate-selection-score}
 \end{equation}
-The layer-wise retained entity set is updated by preserving previously retained entities and adding the $K_l$ highest-scoring new candidates:
+Let $k_l=\min(K_l,|\mathcal{C}^{(l)}|)$. The retained set preserves previously retained entities and adds up to $K_l$ new candidates:
 \begin{equation}
 \mathcal{V}^{(l)}
 =
 \mathcal{V}^{(l-1)}
 \cup
-\operatorname{TopK}_{K_l}
+\operatorname{TopK}_{k_l}
 \left(
 \mathcal{C}^{(l)};
 \widetilde{\mathbf{s}}^{(l)}
 \right).
 \label{eq:topk-frontier-update}
 \end{equation}
-Finally, the message-derived response is accumulated recurrently over reasoning layers:
+The message-derived response then updates the retained entity state:
 \begin{equation}
 \mathbf{h}_{v}^{(l)}
 =
@@ -586,9 +590,9 @@ Finally, the message-derived response is accumulated recurrently over reasoning 
 v\in\mathcal{V}^{(l)}.
 \label{eq:recurrent-entity-update}
 \end{equation}
-Here, $\widetilde{\mathbf{s}}^{(l)}$ denotes the relaxed candidate-selection scores used during training. To optimize the layer-wise Top-$K_l$ selection, training uses a Gumbel--Softmax relaxation with temperature $\tau$ and a straight-through selection mask, whereas inference performs deterministic Top-$K_l$ selection. Thus, $\mathcal{V}^{(l)}$ is a cumulative layer-wise retained entity set: it contains the previously retained entities together with the highest-scoring newly reached candidates and supplies the source entities expanded at layer $l+1$.
+For a nonempty candidate set, training uses Gumbel--Softmax probabilities $\widetilde{\mathbf{s}}^{(l)}=\operatorname{softmax}((\mathbf{s}^{(l)}+\mathbf{g})/\tau)$ over $\mathcal{C}^{(l)}$, where the components of $\mathbf{g}$ are independent standard Gumbel perturbations. A straight-through mask uses the binary Top-$k_l$ selection in the forward pass and the relaxed probabilities to approximate its gradient. At inference, $\widetilde{\mathbf{s}}^{(l)}=\mathbf{s}^{(l)}$ gives deterministic Top-$k_l$ selection. If $\mathcal{C}^{(l)}$ is empty, no new entity is added.
 
-For a newly retained entity, the previous state is initialized to zero. The updated state becomes the source entity state at layer $l+1$, closing the recursive process from relation context to message interaction, candidate retention, and multi-hop state evolution.
+Newly retained entities have zero previous states. The cumulative retained set satisfies $|\mathcal{V}^{(l)}|\leq 1+\sum_{t=1}^{l}K_t$ and supplies the source entities for expansion at layer $l+1$.
 
 \subsection{Answer Prediction and Model Optimization}\label{subsec:model-training}
 
@@ -600,7 +604,7 @@ Algorithm~\ref{alg:rpcd-forward} summarizes the query-level forward process. The
 \begin{algorithmic}[1]
 \Require Reasoning graph $\mathcal{T}_{g}$, sparsified relation-co-occurrence graph $\mathcal{G}_{r}$, query $(h_q,r_q,?)$, layers $L$, relation steps $J$, retention budgets $\{K_l\}_{l=1}^{L}$
 \Ensure Scores over $\mathcal{E}$
-\State Initialize $\mathcal{V}^{(0)}=\{h_q\}$ and its zero state
+\State Initialize $\mathcal{V}^{(0)}=\{h_q\}$ and $\mathbf{h}_{h_q}^{(0,q)}=\mathbf{0}$
 \For{$l=1$ to $L$}
     \State Initialize $\mathbf{r}_{i}^{(l,0,q)}=\mathbf{r}_{i}^{(l)}$ and propagate $\widetilde{\mathbf{R}}^{(l,q)}$ for $J$ steps
     \State Expand $\mathcal{E}^{(l)}$ and obtain $\overline{\mathcal{V}}^{(l)}$ and $\mathcal{C}^{(l)}$
@@ -612,17 +616,17 @@ Algorithm~\ref{alg:rpcd-forward} summarizes the query-level forward process. The
         \State Compute direct and phase-coherent message aggregates
         \State Form provisional state $\widehat{\mathbf{h}}_{v}^{(l)}$
     \EndFor
-    \State Score $\mathcal{C}^{(l)}$ and update the retained entity set by Eq.~\eqref{eq:topk-frontier-update}
+    \State Score $\mathcal{C}^{(l)}$, obtain $\widetilde{\mathbf{s}}^{(l)}$, and retain entities by Eq.~\eqref{eq:topk-frontier-update}
     \For{each $v\in\mathcal{V}^{(l)}$}
         \State Evolve retained state $\mathbf{h}_{v}^{(l)}$ by Eq.~\eqref{eq:recurrent-entity-update}
     \EndFor
 \EndFor
-\State Project reached states and map them to the global candidate space
+\State Score retained states and map logits to the global candidate space
 \State \Return $\{score(h_q,r_q,e)\mid e\in\mathcal{E}\}$
 \end{algorithmic}
 \end{algorithm}
 
-After $L$ reasoning layers, the states of retained entities are projected into the global entity space for answer ranking. For batch element $b$ and entity $e$, define the global representation as
+After $L$ layers, retained entity states are scored and mapped to the full entity vocabulary. For batch element $b$ and entity $e$, define the global representation as
 \begin{equation}
 \overline{\mathbf{h}}_{b,e}^{(L)}
 =
@@ -632,7 +636,7 @@ After $L$ reasoning layers, the states of retained entities are projected into t
 \end{cases}
 \label{eq:global-candidate-representation}
 \end{equation}
-For each entity $e$, the answer score is then computed as
+For a single query, omitting the batch index, the answer score is
 \begin{equation}
 score(h_q,r_q,e)
 =
@@ -658,38 +662,40 @@ At evaluation time, all entities are ranked by these scores under the filtered p
 
 \subsection{Computational Complexity}\label{subsec:computational-complexity}
 
-Let $B$ be the query batch size, $d$ the hidden dimension, $a$ the attention dimension, $M_R$ the number of edges in the sparse relation-co-occurrence graph, and $J$ the number of relation-propagation steps within each reasoning layer. Let $M_l$ and $N_l$ denote the numbers of expanded entity edges and reached candidate nodes at layer $l$, respectively, accumulated over the batch. The per-batch online time complexity of RPCD-GNN is
+Let $B$ be the query batch size, $d$ the hidden dimension, $a$ the attention width, and $M_R$ the number of relation-graph edges. At layer $l$, let $M_l$, $N_l$, and $C_l$ count expanded entity edges, provisional entities, and new candidates, respectively, summed over the batch. Given the expanded neighborhoods, the forward cost of relation propagation, entity computation, candidate retention, and the full-entity objective is
 \begin{equation}
 \begin{split}
 \mathcal{O}\!\Bigg(
 \sum_{l=1}^{L}
 \Biggl[
 {}&BJM_R(d^2+da)
-+M_l(d^2+da)
-\\
++M_l(d^2+da)\\
 {}&+N_ld^2
-+B|\mathcal{E}|\log K_l
-\Biggr]
-\\
++C_l\log(1+K_l)
+\Biggr]\\
 {}&+B|\mathcal{E}|
 \Bigg).
 \end{split}
 \label{eq:computational-complexity}
 \end{equation}
-The four terms inside the summation correspond, respectively, to query-relation-conditioned relation propagation, entity-edge evidence formation and phase-aware aggregation, recurrent candidate-state updates, and bounded entity retention. The final $B|\mathcal{E}|$ term accounts for assembling the retained states in the global entity space and evaluating the full-entity objective. The dense candidate-space term reflects the current batched implementation: entity propagation is restricted to dynamically reached candidates, whereas candidate selection and global scoring operate over the entity vocabulary. Since each receiving relation retains at most $K_r$ structural associations together with one identity self-loop, the sparse relation-co-occurrence graph satisfies $M_R\leq|\mathcal{R}'|(K_r+1)$. Consequently, the online relation-context overhead is bounded by $\mathcal{O}(BLJ|\mathcal{R}'|(K_r+1)(d^2+da))$, which depends on the relation vocabulary rather than the number of entities once the relation-co-occurrence graph has been precomputed. Before training, the unpruned relation-co-occurrence graph is constructed once in $\mathcal{O}(\sum_{e\in\mathcal{E}}c_e^2)$ time, where $c_e=|\mathcal{A}_e|$ is the number of direction-aware relation incidences at entity $e$, and is subsequently sparsified by relation-wise Top-$K_r$ pruning. Beyond the entity-state tensors required by progressive propagation, the principal additional memory terms are $\mathcal{O}(B|\mathcal{R}'|d+M_R)$ for query-conditioned relation states and the sparse relation-co-occurrence graph.
+The relation term covers $J$ inner propagation steps. Entity-edge computation includes message content, admission, and phase assignment, while the node term covers aggregate projections and recurrent updates. The retention bound assumes heap-based Top-$K_l$ selection over the current candidate set; the logarithm is written as $\log(1+K_l)$ to include $K_l=1$. The final term accounts for assembling full-entity scores and evaluating the softmax objective. This bound excludes graph retrieval and indexing costs, which depend on the storage structure. Dense entity-vocabulary selection instead processes $B|\mathcal{E}|$ entries per layer and requires corresponding selection work and buffers.
+
+Since each receiving relation has at most $K_r$ structural neighbors and one identity self-loop, $M_R\leq|\mathcal{R}'|(K_r+1)$. Relation-context computation is therefore bounded by $\mathcal{O}(BLJ|\mathcal{R}'|(K_r+1)(d^2+da))$ after preprocessing. Co-occurrence counting costs $\mathcal{O}(\sum_e c_e^2)$, where $c_e=|\mathcal{A}_e|$. If $D_i$ denotes the number of nonzero associations in row $i$, normalization and heap-based sparsification add $\mathcal{O}(\sum_i D_i[1+\log(1+K_r)])$. These preprocessing steps are performed once.
+
+Excluding trainable parameters, persistent relation storage is $\mathcal{O}(M_R+B|\mathcal{R}'|d)$ for topology, weights, and query-conditioned states. A vectorized relation step additionally uses edge-wise activations of order $\mathcal{O}(BM_R(d+a))$. Entity-message and phase computations use $\mathcal{O}(M_l(d+a)+N_ld)$ activations, and full-entity scores require $\mathcal{O}(B|\mathcal{E}|)$ storage. Inference working memory is governed by the largest active layer together with persistent storage. Training also retains activations across the $L$ entity layers and $J$ inner relation steps for backpropagation, so the relation-state storage bound alone does not describe training memory.
 
 \section{Experiments}\label{sec:experiments}
 
 \subsection{Datasets}\label{subsec:datasets}
 
-We evaluate RPCD-GNN on five transductive knowledge graph reasoning datasets, including Family, UMLS, WN18RR, NELL-995, and FB15k-237. These datasets span different graph scales and relation vocabularies, allowing us to examine query-conditioned relation propagation and complex-domain message interaction across compact relational benchmarks and larger knowledge graphs.
+We evaluate RPCD-GNN in the transductive setting, using a fixed entity and relation vocabulary across the training, validation, and test splits. Experiments are conducted on five knowledge graph reasoning datasets: Family, UMLS, WN18RR, NELL-995, and FB15k-237. These datasets span different graph scales and relation vocabularies, allowing us to examine query-conditioned relation propagation and complex-domain message interaction across compact relational benchmarks and larger knowledge graphs.
 
 Family is a relational reasoning dataset derived from kinship relations, where the target is to infer implicit family relations from observed relational facts \citep{Kok2007Statistical,Sadeghian2019DRUM}. UMLS is a biomedical relational dataset constructed from the Unified Medical Language System and is commonly used to evaluate multi-relational reasoning over medical concepts \citep{Bodenreider2004UMLS,Sadeghian2019DRUM}. WN18RR is a leakage-reduced subset of WordNet that removes inverse relations from WN18 to reduce test leakage \citep{Dettmers2018ConvE}. FB15k-237 is derived from Freebase by removing near-duplicate and inverse relations and is a widely used benchmark for link prediction \citep{Toutanova2015Observed,Dettmers2018ConvE}. NELL-995 is a knowledge graph reasoning dataset constructed from the Never-Ending Language Learning project and has the largest entity vocabulary among the five datasets \citep{Xiong2017DeepPath}.
 
 The released benchmark files contain a permanent fact set $\mathcal{T}_{f}$, a training set $\mathcal{T}_{tr}$, a validation set $\mathcal{T}_{va}$, and a test set $\mathcal{T}_{te}$. Their statistics are summarized in Table~\ref{tab:dataset-statistics}; the graph--query construction used at each experimental stage is detailed in Section~\ref{subsec:implementation-details}.
 
 \begin{table*}[t]
-\caption{Statistics of the transductive reasoning datasets. Relation and triple counts are reported before augmentation with inverse relations and identity self-loops.}
+\caption{Statistics of the reasoning datasets. Relation and triple counts are reported before augmentation with inverse relations and identity self-loops.}
 \label{tab:dataset-statistics}
 \centering
 \begin{tabular}{lrrrrrr}
@@ -707,7 +713,7 @@ FB15k-237 & 14,541 & 237 & 204,087 & 68,028 & 17,535 & 20,466 \\
 
 \subsection{Baselines and Evaluation Metrics}\label{subsec:baselines-metrics}
 
-We compare RPCD-GNN with representative knowledge graph reasoning methods from complementary reasoning paradigms. The non-GNN baselines include embedding-based models ConvE \citep{Dettmers2018ConvE}, QuatE \citep{Zhang2019QuatE}, and RotatE \citep{Sun2019RotatE}; path- and rule-based reasoners MINERVA \citep{Das2018MINERVA}, DRUM \citep{Sadeghian2019DRUM}, RNNLogic \citep{Qu2021RNNLogic}, and RLogic \citep{Cheng2022RLogic}; and parameter-efficient representation models NodePiece \citep{Galkin2022NodePiece} and MorsE with RotatE as its base scoring function \citep{Chen2021MorsE}. Together, they provide comparisons from triple scoring, explicit relational composition, and parameter-efficient representation learning perspectives.
+We compare RPCD-GNN with representative knowledge graph reasoning methods. Embedding-based baselines include ConvE \citep{Dettmers2018ConvE}, QuatE \citep{Zhang2019QuatE}, and RotatE \citep{Sun2019RotatE}; path- and rule-based baselines include MINERVA \citep{Das2018MINERVA}, DRUM \citep{Sadeghian2019DRUM}, and RNNLogic \citep{Qu2021RNNLogic}. We also include NodePiece \citep{Galkin2022NodePiece} and MorsE with RotatE as its base scoring function \citep{Chen2021MorsE}, providing comparisons with entity representation approaches designed to generalize beyond learned entity embeddings.
 
 The GNN-based baselines include CompGCN \citep{Vashishth2020CompGCN}, NBFNet \citep{Zhu2021NBFNet}, RED-GNN \citep{Zhang2022REDGNN}, AdaProp \citep{Zhang2023AdaProp}, A*Net \citep{Zhu2023AStarNet}, DiffusionE \citep{Cao2024DiffusionE}, and Top-p reasoning \citep{Liu2025TopPReasoning}. CompGCN represents full-graph relational aggregation, whereas NBFNet, RED-GNN, AdaProp, A*Net, DiffusionE, and Top-p reasoning instantiate different forms of query-dependent progressive propagation. The comparison includes representative reasoning methods whose dataset splits and filtered-ranking protocols are compatible with our setting.
 
@@ -719,9 +725,8 @@ At each training epoch $s$, $\mathcal{T}_{f}$ and $\mathcal{T}_{tr}$ are pooled 
 
 The entity propagation graph is augmented with inverse edges and identity self-loops. For FB15k-237, query-associated one-hop edges are removed from $\mathcal{T}_{g}^{(s)}$ following the transductive protocol used by DiffusionE~\citep{Cao2024DiffusionE}. The inclusion of inverse incidences in the relation-co-occurrence graph follows the reported relation-context configuration.
 
-RPCD-GNN is implemented in PyTorch and optimized using Adam with an exponentially decayed learning rate. The principal backbone, training, relation-propagation, and phase-aggregation settings are reported in Table~\ref{tab:implementation-settings}; values are rounded for readability. The model is trained for at most 300 epochs. RPCD-specific parameters are selected according to validation MRR, and the checkpoint with the highest validation MRR is used for final evaluation. Final results are reported as the mean and standard deviation over three independent runs.
+All experiments are conducted using Python 3.8 and PyTorch 2.3 on an NVIDIA GeForce RTX 4090 GPU. RPCD-GNN is optimized using Adam with an exponentially decayed learning rate. The principal backbone, training, relation-propagation, and phase-aggregation settings are reported in Table~\ref{tab:implementation-settings}; values are rounded for readability. The model is trained for at most 300 epochs. RPCD-specific parameters are selected according to validation MRR, and the checkpoint with the highest validation MRR is used for final evaluation. Results for RPCD-GNN in the main comparisons, ablation studies, and parameter sensitivity analyses are averaged over five independent runs.
 
-% TODO(final experiments): specify the GPU model and software versions.
 \begin{table*}[t]
 \caption{Principal dataset-specific configurations used in the experiments.}
 \label{tab:implementation-settings}
@@ -746,7 +751,7 @@ NELL-995 & 64 & 32 & 6 & 2000 & 0.916 & 10 & $8.597\!\times\!10^{-4}$ & 100 & 5 
 
 \subsection{Results and Analysis}\label{subsec:results-analysis}
 
-All reported results follow the transductive filtered-ranking protocol described above. RPCD-GNN checkpoints are selected exclusively according to validation MRR. Literature results are included only when the dataset partition, candidate-ranking space, and filtering protocol are compatible with our setting.
+All reported results follow the filtered-ranking protocol described above. RPCD-GNN checkpoints are selected exclusively according to validation MRR. Baseline results are taken from published benchmark evaluations with compatible dataset partitions, candidate-ranking spaces, and filtering protocols. A dash denotes an unavailable result.
 
 \begin{table*}[t]
 \caption{Experimental results on Family and UMLS. The best and second-best results are highlighted in bold and underlined, respectively.}
@@ -754,29 +759,29 @@ All reported results follow the transductive filtered-ranking protocol described
 \centering
 \small
 \setlength{\tabcolsep}{5pt}
-\begin{tabular}{llcccccc}
+\begin{tabular}{lcccccc}
 \hline
-Type & Model
+Model
 & \multicolumn{3}{c}{Family}
 & \multicolumn{3}{c}{UMLS} \\
-\cline{3-8}
-& & MRR & H@1 & H@10 & MRR & H@1 & H@10 \\
+\cline{2-7}
+& MRR & H@1 & H@10 & MRR & H@1 & H@10 \\
 \hline
-non-GNN & ConvE & 0.912 & 0.837 & 0.982 & 0.937 & 0.922 & 0.967 \\
- & QuatE & 0.941 & 0.896 & 0.991 & 0.944 & 0.905 & 0.993 \\
- & RotatE & 0.921 & 0.866 & 0.988 & 0.925 & 0.863 & 0.993 \\
- & MINERVA & 0.885 & 0.825 & 0.961 & 0.825 & 0.728 & 0.968 \\
- & DRUM & 0.934 & 0.881 & \underline{0.996} & 0.813 & 0.674 & 0.976 \\
- & RNNLogic & 0.881 & 0.857 & 0.907 & 0.842 & 0.772 & 0.965 \\
- & NodePiece & 0.892 & 0.837 & 0.971 & 0.844 & 0.736 & 0.968 \\
- & MorsE (RotatE) & 0.938 & 0.886 & 0.994 & 0.815 & 0.679 & 0.978 \\
+ConvE & 0.912 & 0.837 & 0.982 & 0.937 & 0.922 & 0.967 \\
+QuatE & 0.941 & 0.896 & 0.991 & 0.944 & 0.905 & 0.993 \\
+RotatE & 0.921 & 0.866 & 0.988 & 0.925 & 0.863 & 0.993 \\
+MINERVA & 0.885 & 0.825 & 0.961 & 0.825 & 0.728 & 0.968 \\
+DRUM & 0.934 & 0.881 & \underline{0.996} & 0.813 & 0.674 & 0.976 \\
+RNNLogic & 0.881 & 0.857 & 0.907 & 0.842 & 0.772 & 0.965 \\
+NodePiece & 0.892 & 0.837 & 0.971 & 0.844 & 0.736 & 0.968 \\
+MorsE (RotatE) & 0.938 & 0.886 & 0.994 & 0.815 & 0.679 & 0.978 \\
 \hline
-GNN & CompGCN & 0.933 & 0.883 & 0.991 & 0.927 & 0.867 & 0.994 \\
- & NBFNet & 0.989 & \underline{0.988} & 0.989 & 0.948 & 0.920 & \underline{0.995} \\
- & RED-GNN & \textbf{0.992} & \underline{0.988} & \textbf{0.997} & 0.964 & 0.946 & 0.990 \\
- & AdaProp & 0.988 & 0.986 & 0.990 & 0.969 & 0.956 & \underline{0.995} \\
- & DiffusionE & \underline{0.990} & \textbf{0.989} & 0.992 & \underline{0.970} & \underline{0.957} & 0.992 \\
- & RPCD-GNN & \underline{0.990} & \textbf{0.989} & 0.991 & \textbf{0.982} & \textbf{0.971} & \textbf{0.996} \\
+CompGCN & 0.933 & 0.883 & 0.991 & 0.927 & 0.867 & 0.994 \\
+NBFNet & 0.989 & \underline{0.988} & 0.989 & 0.948 & 0.920 & \underline{0.995} \\
+RED-GNN & \textbf{0.992} & \underline{0.988} & \textbf{0.997} & 0.964 & 0.946 & 0.990 \\
+AdaProp & 0.988 & 0.986 & 0.990 & 0.969 & 0.956 & \underline{0.995} \\
+DiffusionE & \underline{0.990} & \textbf{0.989} & 0.992 & \underline{0.970} & \underline{0.957} & 0.992 \\
+RPCD-GNN & \underline{0.990} & \textbf{0.989} & 0.991 & \textbf{0.982} & \textbf{0.971} & \textbf{0.996} \\
 \hline
 \end{tabular}
 \end{table*}
@@ -809,13 +814,13 @@ RPCD-GNN & \textbf{0.576} & \textbf{0.524} & \textbf{0.679} & \textbf{0.417} & \
 
 Table~\ref{tab:main-results-small} presents the comparison on the compact Family and UMLS reasoning benchmarks, whereas Table~\ref{tab:main-results-large} reports results on WN18RR, FB15k-237, and NELL-995.
 
-After the repeated runs are completed, the analysis will first compare RPCD-GNN with representative methods from different reasoning paradigms and then discuss its performance across datasets with different graph and relational characteristics. The current highlighting reflects the values displayed in the tables and will be updated together with the absolute and relative improvements after all results have been verified under compatible protocols. The effects of query-conditioned relational context and phase-aware message aggregation are examined separately in the subsequent ablation and mechanism analyses.
+RPCD-GNN achieves the best results across all reported metrics on UMLS and WN18RR. On UMLS, its MRR and Hits@1 reach 0.982 and 0.971, respectively, compared with the strongest baseline values of 0.970 and 0.957. On WN18RR, RPCD-GNN attains an MRR of 0.576, exceeding AdaProp by 0.014, while its Hits@1 and Hits@10 reach 0.524 and 0.679. These results demonstrate the effectiveness of the proposed method on both a compact biomedical graph and a larger lexical graph.
 
-The dataset-level discussion will distinguish saturated benchmarks, such as Family, from datasets with richer relation vocabularies or larger reasoning spaces. Explanations based on relation complexity, multi-hop message interaction, or graph scale will be stated only when supported jointly by the final main results, ablations, and mechanism analyses.
+The gains vary across the other datasets. On FB15k-237, RPCD-GNN matches AdaProp in MRR at the reported precision (0.417), although its Hits@1 and Hits@10 remain below the best baseline results. On Family, where leading methods already achieve near-perfect scores, RPCD-GNN ties for the best Hits@1 and remains close to the highest MRR. On NELL-995, it obtains the second-best Hits@10 of 0.657 but does not achieve the best MRR or Hits@1. Thus, the method is competitive across the evaluated benchmarks, with its clearest advantages on UMLS and WN18RR. The following ablation study examines the contributions of its two components.
 
 \subsection{Ablation Study}\label{subsec:ablation-study}
 
-To assess how query-conditioned relational context and phase-aware message aggregation affect reasoning performance, we construct two controlled variants of RPCD-GNN. RPCD-GNN w/o relational context disables query-conditioned relation propagation and uses the base relation representations during message formation. RPCD-GNN w/o phase-coherent aggregation removes the phase-coherent message aggregate and retains direct message accumulation for candidate-state evolution. All other configurations remain unchanged.
+To assess how query-conditioned relational context and phase-aware message aggregation affect reasoning performance, we construct two controlled variants of RPCD-GNN. RPCD-GNN w/o relational context disables the relational controller and uses base relation representations in message content, gating, and phase encoding. RPCD-GNN w/o phase-coherent aggregation removes the phase-aware aggregation branch and retains direct aggregation for candidate-state updating. All other configurations remain unchanged.
 
 \begin{table*}[t]
 \caption{Ablation results of RPCD-GNN on WN18RR, FB15k-237, and NELL-995.}
@@ -839,7 +844,7 @@ RPCD-GNN & 0.576 & 0.679 & 0.417 & 0.586 & 0.549 & 0.657 \\
 \end{tabular}
 \end{table*}
 
-The comparison evaluates how query-conditioned relational context and phase-aware message aggregation affect reasoning performance under the same experimental configuration. The displayed values show that both components contribute to the reported performance.
+Removing either component reduces both MRR and Hits@10 on all three datasets. Without relational context, MRR decreases by 0.013, 0.010, and 0.018 on WN18RR, FB15k-237, and NELL-995, respectively. Removing the phase-aware branch yields corresponding decreases of 0.007, 0.006, and 0.010. Under the evaluated configurations, relational-context removal causes the larger MRR decrease, while the phase-aware branch also contributes consistently to performance. These comparisons support the contribution of both components to RPCD-GNN.
 
 \subsection{Relational Context Analysis}\label{subsec:relation-context-analysis}
 
@@ -864,62 +869,61 @@ NELL-995 & 401 & 3,247 & 3,247 & 0.0202 & 8.0973 & 0.4863 \\
 \end{tabular}
 \end{table*}
 
-Candidate associations count non-self relation pairs that pass the weight threshold before Top-$K_r$ pruning, whereas retained associations count those preserved after thresholding and, when applicable, relation-wise Top-$K_r$ pruning. Density is measured over all possible directed non-self relation pairs, average degree is the mean retained non-self out-degree, and coverage is the proportion of relation types with at least one retained non-self neighbor. These statistics characterize the amount of recurring relational structure preserved by the selected relation graph.
+Candidate associations count non-self relation pairs that pass the weight threshold before Top-$K_r$ pruning, whereas retained associations count those preserved after thresholding and, when applicable, relation-wise Top-$K_r$ pruning. Density is measured over all possible directed non-self pairs in $\mathcal{R}'$, average degree is the mean retained non-self out-degree over $\mathcal{R}'$, and coverage is the proportion of relation types in $\mathcal{R}'$ with at least one retained non-self neighbor. The vocabulary includes original and inverse relations and the identity relation, even when a type has no non-self associations. Consequently, coverage depends in part on whether inverse incidences are included in graph construction. Under the selected configurations, candidate and retained association counts coincide on all five datasets, indicating that relation-wise Top-$K_r$ pruning removes no additional associations after thresholding.
 
-To examine whether query-conditioned relational context changes the composition of propagation paths, we count the relation types appearing in the selected propagation edges for different query relations. Figure~\ref{fig:relation-context-heatmap} compares RPCD-GNN with its relational-context ablation on UMLS and FB15k-237. Each row corresponds to a query relation, while each column records the proportion of a relation type among the selected propagation edges. The row-wise distributions illustrate how relation selection varies with the query relation. For readability, only ten representative relation types are shown for each dataset.
+To examine whether query-conditioned relational context changes the composition of propagation edges, we compare RPCD-GNN with its variant without relational context on UMLS and FB15k-237, as shown in Fig.~\ref{fig:relation-context-heatmap}. For each query relation, we pool the selected propagation edges across all reasoning layers and test queries. Each cell reports the proportion of the corresponding relation type among all selected edges for that query relation. The denominator includes all relation types, although only ten are displayed for readability. The row-wise distributions illustrate how the composition of selected edges varies across query relations.
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=0.95\textwidth]{figs/relation-propagation-heatmap.png}
-  \caption{Heatmaps of relation-type ratios in the selected propagation paths of RPCD-GNN and its relational-context ablation. Rows are different query relations, and columns are relation types in the selected propagation edges. Panels (a) and (b) show UMLS, whereas panels (c) and (d) show FB15k-237. Darker cells indicate higher relation-type ratios. For readability, ten representative relation types are shown for each dataset.}
+  \includegraphics[width=0.95\textwidth]{figs/relation-propagation-heatmap.pdf}
+  \caption{Relation-type distributions among the selected propagation edges of RPCD-GNN and its variant without relational context. Rows correspond to query relations, and columns correspond to relation types. Proportions are computed from test queries across all reasoning layers, using all selected edges for each query relation as the denominator. Panels (a) and (b) show UMLS, whereas panels (c) and (d) show FB15k-237. Darker cells indicate higher proportions; only ten relation types are displayed for each dataset.}
   \label{fig:relation-context-heatmap}
 \end{figure*}
 
-Compared with the relational-context ablation, RPCD-GNN exhibits more query-dependent relation-type distributions, indicating that the relational controller can adapt the propagation structure to different query relations.
+For the displayed query relations, RPCD-GNN shows greater variation in relation-type proportions than the variant without relational context. This observation suggests that relational context influences the composition of selected propagation edges across queries, complementing the performance comparison in the ablation study.
 
 \subsection{Parameter Sensitivity Analysis}\label{subsec:parameter-sensitivity}
 
-The sensitivity study varies the inference depth $L$ and the phase-aware aggregation weight $\eta$ one at a time on WN18RR and FB15k-237 while holding the remaining validation-selected configuration fixed, as organized in Fig.~\ref{fig:parameter-sensitivity}. The depth $L$ controls the number of entity-propagation steps, whereas $\eta$ controls the contribution of phase-coherent messages to the candidate-state update. The evaluated grids are $L\in\{5,6,7,8,9,10\}$ and $\eta\in\{0,0.1,0.3,0.6,1.0\}$. MRR and Hits@10 are recorded for every sweep, and the test set is not used to choose the operating point.
+The sensitivity study varies the entity-propagation depth $L$ and the phase-aware aggregation weight $\eta$ one at a time on WN18RR and FB15k-237 while holding the remaining validation-selected configuration fixed, as shown in Fig.~\ref{fig:parameter-sensitivity}. The depth $L$ controls the number of entity-propagation steps, whereas $\eta$ controls the contribution of phase-coherent messages to the candidate-state update. The evaluated grids are $L\in\{5,6,7,8,9,10\}$ and $\eta\in\{0,0.1,0.3,0.6,1.0\}$. For each parameter configuration, we train the model separately and evaluate the checkpoint selected by validation MRR on the test set. The curves report test MRR and Hits@10 under the averaging convention specified in Section~\ref{subsec:implementation-details}. The test set is not used to select the operating configuration.
 
 \begin{figure*}[t]
   \centering
   \begin{tabular}{cc}
-    \includegraphics[width=0.47\textwidth]{figs/sensitivity-L-MRR.png} &
-    \includegraphics[width=0.47\textwidth]{figs/sensitivity-L-Hits10.png} \\
+    \includegraphics[width=0.47\textwidth]{figs/sensitivity-L-MRR.pdf} &
+    \includegraphics[width=0.47\textwidth]{figs/sensitivity-L-Hits10.pdf} \\
     \scriptsize (a) $L$--MRR & \scriptsize (b) $L$--Hits@10 \\
-    \includegraphics[width=0.47\textwidth]{figs/sensitivity-eta-MRR.png} &
-    \includegraphics[width=0.47\textwidth]{figs/sensitivity-eta-Hits10.png} \\
+    \includegraphics[width=0.47\textwidth]{figs/sensitivity-eta-MRR.pdf} &
+    \includegraphics[width=0.47\textwidth]{figs/sensitivity-eta-Hits10.pdf} \\
     \scriptsize (c) $\eta$--MRR & \scriptsize (d) $\eta$--Hits@10
   \end{tabular}
-  \caption{Sensitivity of RPCD-GNN to the inference depth $L$ and phase-aware aggregation weight $\eta$ on WN18RR and FB15k-237. Each panel reports one metric while the remaining configuration is held fixed.}
+  \caption{Sensitivity of RPCD-GNN to the entity-propagation depth $L$ and phase-aware aggregation weight $\eta$ on WN18RR and FB15k-237. Each configuration is trained separately, with the checkpoint selected by validation MRR. Panels report test MRR or Hits@10 while the remaining settings are held fixed.}
   \label{fig:parameter-sensitivity}
 \end{figure*}
 
-The analysis examines how the scope of relational context and the contribution of the phase-coherent message aggregate affect validation performance without assuming a preferred trend before the controlled sweeps are completed. The final discussion will distinguish broad stable regions from isolated best points and will attribute a trend to the corresponding design only when it is consistent across the reported datasets.
+Within the evaluated range, performance initially improves as the entity-propagation depth $L$ increases, reaching its highest values at $L=8$ on WN18RR and $L=7$ on FB15k-237. Further increasing the depth reduces both MRR and Hits@10. These results indicate that additional propagation steps are beneficial up to a dataset-dependent depth, while deeper propagation does not necessarily improve prediction accuracy.
 
-\subsection{Case Study}\label{subsec:case-study}
+The effect of the phase-aware aggregation weight $\eta$ also differs across datasets. WN18RR achieves its highest performance at $\eta=0.1$, whereas FB15k-237 favors $\eta=0.6$. Both datasets benefit from a nonzero phase-aware contribution, but increasing its weight beyond these values reduces performance. This suggests that the contribution of the phase-aware branch should be balanced with that of direct aggregation.
 
-To make the interaction pattern concrete, Fig.~\ref{fig:reasoning-path-case} presents an illustrative multi-hop reasoning subgraph constructed with UMLS entity and relation names. The schematic query is \texttt{(Pharmacologic\_Substance, Treats, ?)}, and \texttt{Disease\_or\_Syndrome} is shown as a candidate target. The topology is arranged to explain how RPCD-GNN combines query-conditioned relation co-diffusion with phase-aware message aggregation; it is not used to report numerical performance or learned attention values.
+\subsection{Illustrative Reasoning Example}\label{subsec:case-study}
+
+Figure~\ref{fig:reasoning-path-case} presents an illustrative reasoning subgraph constructed with UMLS entity and relation names for the query \texttt{(Pharmacologic\_Substance, Treats, ?)}, with \texttt{Disease\_or\_Syndrome} as a candidate answer. The example shows how query-conditioned relational context informs message computation and how phase-aware aggregation combines incoming messages at a candidate entity.
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=0.95\textwidth]{figs/reasoning-path-case-study.png}
-  \caption{Illustrative multi-hop reasoning graph using UMLS entity and relation names. Dark-blue paths depict relation co-diffusion, teal paths depict phase-compatible auxiliary propagation, and dashed gray edges provide contextual relational evidence. The target candidate is highlighted with a dashed border; the graph is schematic and contains no learned weights.}
+  \includegraphics[width=0.95\textwidth]{figs/reasoning-path-case-study.pdf}
+  \caption{Illustrative reasoning subgraph using UMLS entity and relation names. Colored branches distinguish alternative routes to the candidate entity, and gray dashed edges show additional graph connections. The candidate answer is enclosed by a dashed border. Colors distinguish routes only; they do not encode learned attention weights or phase values.}
   \label{fig:reasoning-path-case}
 \end{figure*}
 
-The graph emphasizes that several relation sequences can converge on the same candidate: dark-blue branches represent query-conditioned relational support, whereas the teal branch illustrates an auxiliary phase-compatible route before candidate-state updating. The figure is a conceptual interpretation aid; quantitative component comparisons are reported separately in the ablation and sensitivity analyses.
+The example highlights two complementary stages of RPCD-GNN. Query-conditioned relational context is incorporated into message content, gating, and phase encoding. When messages from different branches reach the same candidate, their learned phases affect the real and imaginary aggregates. These aggregates and their stabilized amplitudes form the phase-aware branch, which is combined with direct aggregation to update the candidate state.
 
 \section{Conclusion}\label{sec:conclusion}
 
-In this paper, we proposed RPCD-GNN, a query-conditioned progressive reasoning framework that couples relation propagation with complex-domain message interaction for knowledge graph reasoning. RPCD-GNN connects relation-level structural modeling with cross-message interaction by organizing relational context formation, relation-conditioned message construction, phase-aware message aggregation, and candidate-state evolution within a unified recurrent process. The resulting query-conditioned relational context jointly regulates message content, admission strength, and interaction phase, thereby controlling how messages are formed and combined during candidate prediction.
+In this paper, we proposed RPCD-GNN, a progressive knowledge graph reasoning framework that coordinates query-conditioned relational context with phase-aware message aggregation. A relational controller generates layer-wise contexts that jointly regulate message content, admission gates, and interaction phases. A complex-domain aggregation operator models phase-dependent interactions among messages converging on the same candidate and combines them with direct message accumulation for entity-state updating.
 
-RPCD-GNN computes a direct message aggregate and a phase-coherent message aggregate from the same set of relation-conditioned incoming messages. Their fused response preserves additive message content while retaining phase-dependent interaction structure among messages converging on the same candidate, and recurrently updates candidate states across reasoning layers.
+Experiments on five benchmark datasets demonstrate competitive link-prediction performance, with the best results among the compared methods on UMLS and WN18RR across all reported metrics. Ablation studies further show that both the relational controller and phase-aware aggregation contribute to the reported performance.
 
-% TODO: Add the final empirical conclusion based on the main results,
-% ablation study, and relational context analysis.
-
-Future work will extend RPCD-GNN to larger and dynamically evolving knowledge graphs and incorporate textual or temporal signals into query-conditioned relational context and message formation. These extensions will examine the framework under richer and non-stationary semantic settings.
+The current framework uses a fixed relation-co-occurrence graph. Future work will explore adaptive updates to this graph and the integration of textual information to enrich query-conditioned relational context.
 
 % Numbered list
 % Use the style of numbering in square brackets.
