@@ -30,6 +30,14 @@
 \usepackage{algorithm}
 \usepackage{algpseudocode}
 \usepackage{stfloats}
+\usepackage{placeins}
+
+% Shared body style for manuscript tables.
+\newcommand{\papertablestyle}{%
+  \footnotesize
+  \renewcommand{\arraystretch}{1.12}%
+  \setlength{\tabcolsep}{3pt}%
+}
 
 %%%Author macros
 \def\tsc#1{\csdef{#1}{\textsc{\lowercase{#1}}\xspace}}
@@ -157,7 +165,6 @@ Knowledge graph reasoning infers missing facts by aggregating query-relevant evi
 \item Phase-coherent aggregation models interactions beyond direct message sums.
 \end{highlights}
 
-
 %\nocite{*}
 
 % Keywords
@@ -253,6 +260,7 @@ We use ReLU in the relation-attention, message, admission, and phase encoders. T
 
 \begin{table*}[width=\FullWidth,cols=2,pos=t]
 \caption{Definitions of the main notations.}\label{tbl:notations}
+\papertablestyle
 \begin{tabular*}{\tblwidth}{@{}p{0.38\FullWidth}@{\hspace{0.02\FullWidth}}p{0.60\FullWidth}@{}}
 \toprule
 Notation & Definition \\
@@ -277,18 +285,18 @@ $\tau_r,\tau_p,\tau$ & Relation, phase, and candidate-selection temperatures \\
 \end{tabular*}
 \end{table*}
 
-\subsection{Model Overview}\label{subsec:overall-framework}
-
-Figure~\ref{fig:framework} presents RPCD-GNN as a relational controller coupled with phase-aware entity reasoning. Given $q=(h_q,r_q)$, the query entity initializes entity propagation and the query relation conditions the controller. At layer $l$, the controller generates $\widetilde{\mathbf{R}}^{(l,q)}\in\mathbb{R}^{|\mathcal{R}'|\times d}$ by stacking the fused relation states. This context jointly controls message content, admission gates, and interaction phases.
-
-Messages reaching the same candidate are summarized by direct accumulation and complex-domain statistics. Their projected responses are fused into a provisional candidate state, followed by candidate retention and a recurrent state update. The process repeats for $L$ layers, with relational contexts recomputed at each layer, and the final states are scored for answer ranking. The figure uses $h$ and $r$ for $h_q$ and $r_q$. Sections~\ref{subsec:relation-codiffusion}--\ref{subsec:model-training} define the component computations. For readability, the query superscript is omitted below when unambiguous.
-
 \begin{figure*}[t]
   \centering
   \includegraphics[width=\textwidth]{figs/Query-conditioned relational controller.pdf}
   \caption{Overview of RPCD-GNN. The input graph and query $(h,r,?)$ are shown on the left. The upper component constructs a relation-co-occurrence graph and propagates query-conditioned relation states to produce layer-wise contexts. These contexts jointly control message content, admission gating, and interaction phase in the lower entity-reasoning component. Direct accumulation and phase-coherent aggregation summarize the same incoming messages, and their fused response recurrently updates entity states. After $L$ reasoning layers, the scoring stage on the right ranks candidate entities and predicts $\hat{t}$.}
   \label{fig:framework}
 \end{figure*}
+
+\subsection{Model Overview}\label{subsec:overall-framework}
+
+Figure~\ref{fig:framework} presents RPCD-GNN as a relational controller coupled with phase-aware entity reasoning. Given $q=(h_q,r_q)$, the query entity initializes entity propagation and the query relation conditions the controller. At layer $l$, the controller generates $\widetilde{\mathbf{R}}^{(l,q)}\in\mathbb{R}^{|\mathcal{R}'|\times d}$ by stacking the fused relation states. This context jointly controls message content, admission gates, and interaction phases.
+
+Messages reaching the same candidate are summarized by direct accumulation and complex-domain statistics. Their projected responses are fused into a provisional candidate state, followed by candidate retention and a recurrent state update. The process repeats for $L$ layers, with relational contexts recomputed at each layer, and the final states are scored for answer ranking. The figure uses $h$ and $r$ for $h_q$ and $r_q$. Sections~\ref{subsec:relation-codiffusion}--\ref{subsec:model-training} define the component computations. For readability, the query superscript is omitted below when unambiguous.
 
 \subsection{Query-Conditioned Relational Context}\label{subsec:relation-codiffusion}
 
@@ -694,21 +702,46 @@ Family is a relational reasoning dataset derived from kinship relations, where t
 
 The released benchmark files contain a permanent fact set $\mathcal{T}_{f}$, a training set $\mathcal{T}_{tr}$, a validation set $\mathcal{T}_{va}$, and a test set $\mathcal{T}_{te}$. Their statistics are summarized in Table~\ref{tab:dataset-statistics}; the graph--query construction used at each experimental stage is detailed in Section~\ref{subsec:implementation-details}.
 
-\begin{table*}[t]
-\caption{Statistics of the reasoning datasets. Relation and triple counts are reported before augmentation with inverse relations and identity self-loops.}
+\begin{table}[width=\columnwidth,pos=t]
+\caption{Dataset statistics before augmentation with inverse relations and identity self-loops.}
 \label{tab:dataset-statistics}
 \centering
-\begin{tabular}{lrrrrrr}
-\hline
-Dataset & Entities & Relations & Facts & Train & Valid & Test \\
-\hline
+\papertablestyle
+\setlength{\tabcolsep}{1.5pt}
+\begin{tabular*}{\linewidth}{@{}l@{\extracolsep{\fill}}rrrrrr@{}}
+\toprule
+Dataset & Ent. & Rel. & Facts & Train & Valid & Test \\
+\midrule
 Family & 3,007 & 12 & 17,615 & 5,868 & 2,038 & 2,835 \\
 UMLS & 135 & 46 & 4,006 & 1,321 & 569 & 633 \\
 WN18RR & 40,943 & 11 & 65,130 & 21,705 & 3,034 & 3,134 \\
 NELL-995 & 74,536 & 200 & 112,258 & 37,420 & 543 & 2,818 \\
 FB15k-237 & 14,541 & 237 & 204,087 & 68,028 & 17,535 & 20,466 \\
-\hline
-\end{tabular}
+\bottomrule
+\end{tabular*}
+\par\smallskip
+\parbox{\linewidth}{\footnotesize\emph{Note:} Ent. and Rel. denote entities and relations.}
+\end{table}
+
+\begin{table*}[width=0.85\textwidth,pos=t]
+\caption{Principal dataset-specific configurations used in the experiments.}
+\label{tab:implementation-settings}
+\centering
+\papertablestyle
+\begin{tabular*}{\tblwidth}{@{}l@{\extracolsep{\fill}}rrrrrrrrrrr@{}}
+\toprule
+Dataset & $d$ & $a$ & $L$ & $K_l$ & $\varrho$ & Batch & LR & $K_r$ & $J$ & $\lambda$ & $\eta$ \\
+\midrule
+Family & 32 & 8 & 8 & 50 & 0.857 & 20 & $1.760\!\times\!10^{-3}$ & 10 & 1 & 0.3 & 0.7 \\
+UMLS & 32 & 16 & 8 & 100 & 0.861 & 5 & $8.246\!\times\!10^{-4}$ & 50 & 3 & 0.7 & 0.1 \\
+WN18RR & 48 & 8 & 8 & 1000 & 0.935 & 50 & $4.134\!\times\!10^{-3}$ & 10 & 2 & 0.3 & 0.1 \\
+FB15k-237 & 32 & 8 & 7 & 2000 & 0.993 & 8 & $7.489\!\times\!10^{-4}$ & 200 & 3 & 1.0 & 0.6 \\
+NELL-995 & 64 & 32 & 6 & 2000 & 0.916 & 10 & $8.597\!\times\!10^{-4}$ & 100 & 5 & 0.1 & 0.4 \\
+\bottomrule
+\end{tabular*}
+\vspace{2pt}
+
+\parbox{\tblwidth}{\footnotesize \emph{Note:} $K_r$ is a finite per-relation neighbor budget. The reported values are no smaller than the maximum threshold-qualified relation-neighbor degree of the corresponding relation graph, so no additional relation-neighbor truncation is applied. Inverse relation incidences are included in relation-co-occurrence construction only for UMLS.}
 \end{table*}
 
 \subsection{Baselines and Evaluation Metrics}\label{subsec:baselines-metrics}
@@ -719,54 +752,19 @@ The GNN-based baselines include CompGCN \citep{Vashishth2020CompGCN}, NBFNet \ci
 
 Following the standard filtered-ranking protocol, we evaluate both tail prediction and head prediction, where head-prediction queries are converted into tail-prediction queries using inverse relations. For each query, all entities are ranked according to their prediction scores, while other known correct answers in $\mathcal{T}_{f}\cup\mathcal{T}_{tr}\cup\mathcal{T}_{va}\cup\mathcal{T}_{te}$ are removed only when computing the rank of the target entity. We report mean reciprocal rank (MRR), Hits@1, and Hits@10, with higher values indicating better reasoning performance.
 
-\subsection{Implementation Details}\label{subsec:implementation-details}
-
-At each training epoch $s$, $\mathcal{T}_{f}$ and $\mathcal{T}_{tr}$ are pooled and randomly repartitioned according to the dataset-specific fact ratio $\varrho$. The retained triples form the current reasoning graph $\mathcal{T}_{g}^{(s)}$, while the remaining triples provide supervised queries $\mathcal{T}_{q}^{(s)}$. During validation and testing, $\mathcal{T}_{f}\cup\mathcal{T}_{tr}$ forms the fixed reasoning graph, and queries are drawn from $\mathcal{T}_{va}$ and $\mathcal{T}_{te}$, respectively. The topology and structural weights of the relation-co-occurrence graph are constructed once from $\mathcal{T}_{f}$ and remain fixed throughout training and evaluation, whereas its query-conditioned relational context is recomputed for each query and reasoning layer.
-
-The entity propagation graph is augmented with inverse edges and identity self-loops. For FB15k-237, query-associated one-hop edges are removed from $\mathcal{T}_{g}^{(s)}$ following the transductive protocol used by DiffusionE~\citep{Cao2024DiffusionE}. The inclusion of inverse incidences in the relation-co-occurrence graph follows the reported relation-context configuration.
-
-All experiments are conducted using Python 3.8 and PyTorch 2.3 on an NVIDIA GeForce RTX 4090 GPU. RPCD-GNN is optimized using Adam with an exponentially decayed learning rate. The principal backbone, training, relation-propagation, and phase-aggregation settings are reported in Table~\ref{tab:implementation-settings}; values are rounded for readability. The model is trained for at most 300 epochs. RPCD-specific parameters are selected according to validation MRR, and the checkpoint with the highest validation MRR is used for final evaluation. Results for RPCD-GNN in the main comparisons, ablation studies, and parameter sensitivity analyses are averaged over five independent runs.
-
-\begin{table*}[t]
-\caption{Principal dataset-specific configurations used in the experiments.}
-\label{tab:implementation-settings}
-\centering
-\scriptsize
-\setlength{\tabcolsep}{3.2pt}
-\begin{tabular}{lrrrrrrrrrrr}
-\toprule
-Dataset & $d$ & $a$ & $L$ & $K_l$ & $\varrho$ & Batch & LR & $K_r$ & $J$ & $\lambda$ & $\eta$ \\
-\midrule
-Family & 32 & 8 & 8 & 50 & 0.857 & 20 & $1.760\!\times\!10^{-3}$ & 10 & 1 & 0.3 & 0.7 \\
-UMLS & 32 & 16 & 8 & 100 & 0.861 & 5 & $8.246\!\times\!10^{-4}$ & 50 & 3 & 0.7 & 0.1 \\
-WN18RR & 48 & 8 & 8 & 1000 & 0.935 & 50 & $4.134\!\times\!10^{-3}$ & 10 & 2 & 0.3 & 0.1 \\
-FB15k-237 & 32 & 8 & 7 & 2000 & 0.993 & 8 & $7.489\!\times\!10^{-4}$ & 200 & 3 & 1.0 & 0.6 \\
-NELL-995 & 64 & 32 & 6 & 2000 & 0.916 & 10 & $8.597\!\times\!10^{-4}$ & 100 & 5 & 0.1 & 0.4 \\
-\bottomrule
-\end{tabular}
-\vspace{2pt}
-
-\parbox{0.98\textwidth}{\scriptsize \emph{Note:} $K_r$ is a finite per-relation neighbor budget. The reported values are no smaller than the maximum threshold-qualified relation-neighbor degree of the corresponding relation graph, so no additional relation-neighbor truncation is applied. Inverse relation incidences are included in relation-co-occurrence construction only for UMLS.}
-\end{table*}
-
-\subsection{Results and Analysis}\label{subsec:results-analysis}
-
-All reported results follow the filtered-ranking protocol described above. RPCD-GNN checkpoints are selected exclusively according to validation MRR. Baseline results are taken from published benchmark evaluations with compatible dataset partitions, candidate-ranking spaces, and filtering protocols. A dash denotes an unavailable result.
-
-\begin{table*}[t]
+\begin{table*}[width=0.85\textwidth,pos=t]
 \caption{Experimental results on Family and UMLS. The best and second-best results are highlighted in bold and underlined, respectively.}
 \label{tab:main-results-small}
 \centering
-\small
-\setlength{\tabcolsep}{5pt}
-\begin{tabular}{lcccccc}
-\hline
+\papertablestyle
+\begin{tabular*}{\tblwidth}{@{}l@{\extracolsep{\fill}}rrrrrr@{}}
+\toprule
 Model
 & \multicolumn{3}{c}{Family}
 & \multicolumn{3}{c}{UMLS} \\
-\cline{2-7}
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
 & MRR & H@1 & H@10 & MRR & H@1 & H@10 \\
-\hline
+\midrule
 ConvE & 0.912 & 0.837 & 0.982 & 0.937 & 0.922 & 0.967 \\
 QuatE & 0.941 & 0.896 & 0.991 & 0.944 & 0.905 & 0.993 \\
 RotatE & 0.921 & 0.866 & 0.988 & 0.925 & 0.863 & 0.993 \\
@@ -775,103 +773,86 @@ DRUM & 0.934 & 0.881 & \underline{0.996} & 0.813 & 0.674 & 0.976 \\
 RNNLogic & 0.881 & 0.857 & 0.907 & 0.842 & 0.772 & 0.965 \\
 NodePiece & 0.892 & 0.837 & 0.971 & 0.844 & 0.736 & 0.968 \\
 MorsE (RotatE) & 0.938 & 0.886 & 0.994 & 0.815 & 0.679 & 0.978 \\
-\hline
+\midrule
 CompGCN & 0.933 & 0.883 & 0.991 & 0.927 & 0.867 & 0.994 \\
 NBFNet & 0.989 & \underline{0.988} & 0.989 & 0.948 & 0.920 & \underline{0.995} \\
 RED-GNN & \textbf{0.992} & \underline{0.988} & \textbf{0.997} & 0.964 & 0.946 & 0.990 \\
 AdaProp & 0.988 & 0.986 & 0.990 & 0.969 & 0.956 & \underline{0.995} \\
 DiffusionE & \underline{0.990} & \textbf{0.989} & 0.992 & \underline{0.970} & \underline{0.957} & 0.992 \\
 RPCD-GNN & \underline{0.990} & \textbf{0.989} & 0.991 & \textbf{0.982} & \textbf{0.971} & \textbf{0.996} \\
-\hline
-\end{tabular}
+\bottomrule
+\end{tabular*}
 \end{table*}
 
-\begin{table*}[t]
+\begin{table*}[width=0.85\textwidth,pos=t]
 \caption{Experimental results on WN18RR, FB15k-237, and NELL-995. The best and second-best results are highlighted in bold and underlined, respectively.}
 \label{tab:main-results-large}
 \centering
-\small
-\setlength{\tabcolsep}{3.5pt}
-\begin{tabular}{lccccccccc}
-\hline
+\papertablestyle
+\begin{tabular*}{\tblwidth}{@{}l@{\extracolsep{\fill}}rrrrrrrrr@{}}
+\toprule
 Model
 & \multicolumn{3}{c}{WN18RR}
 & \multicolumn{3}{c}{FB15k-237}
 & \multicolumn{3}{c}{NELL-995} \\
-\cline{2-10}
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}\cmidrule(lr){8-10}
 & MRR & H@1 & H@10 & MRR & H@1 & H@10 & MRR & H@1 & H@10 \\
-\hline
+\midrule
 NBFNet & 0.551 & 0.497 & 0.666 & \underline{0.415} & 0.321 & \textbf{0.599} & 0.525 & 0.451 & 0.639 \\
 RED-GNN & 0.533 & 0.485 & 0.624 & 0.374 & 0.283 & 0.558 & 0.543 & 0.476 & 0.651 \\
-AdaProp & \underline{0.562} & 0.499 & 0.671 & \textbf{0.417} & \textbf{0.331} & 0.585 & \underline{0.554} & \underline{0.493} & 0.655 \\
-A*Net & 0.549 & 0.495 & 0.659 & 0.411 & 0.321 & \underline{0.586} & -- & -- & -- \\
+AdaProp & \underline{0.562} & 0.499 & 0.671 & \textbf{0.417} & \textbf{0.331} & 0.585 & 0.554 & 0.493 & 0.655 \\
+A*Net & 0.549 & 0.495 & 0.659 & 0.411 & 0.321 & \underline{0.586} & \multicolumn{1}{c}{--} & \multicolumn{1}{c}{--} & \multicolumn{1}{c@{}}{--} \\
 DiffusionE & 0.557 & \underline{0.504} & 0.658 & 0.376 & 0.294 & 0.539 & 0.552 & 0.490 & 0.654 \\
-Top-p reasoning & 0.559 & 0.498 & \underline{0.676} & -- & -- & -- & \textbf{0.559} & \textbf{0.496} & \textbf{0.662} \\
-RPCD-GNN & \textbf{0.576} & \textbf{0.524} & \textbf{0.679} & \textbf{0.417} & \underline{0.324} & \underline{0.586} & 0.549 & 0.488 & \underline{0.657} \\
-\hline
-\end{tabular}
+Top-p reasoning & 0.559 & 0.498 & \underline{0.676} & \multicolumn{1}{c}{--} & \multicolumn{1}{c}{--} & \multicolumn{1}{c}{--} & \underline{0.559} & \underline{0.496} & \underline{0.662} \\
+RPCD-GNN & \textbf{0.576} & \textbf{0.524} & \textbf{0.679} & \textbf{0.417} & \underline{0.324} & \underline{0.586} & \textbf{0.566} & \textbf{0.509} & \textbf{0.667} \\
+\bottomrule
+\end{tabular*}
 \end{table*}
+
+\subsection{Implementation Details}\label{subsec:implementation-details}
+
+At each training epoch $s$, $\mathcal{T}_{f}$ and $\mathcal{T}_{tr}$ are pooled and randomly repartitioned according to the dataset-specific fact ratio $\varrho$. The retained triples form the current reasoning graph $\mathcal{T}_{g}^{(s)}$, while the remaining triples provide supervised queries $\mathcal{T}_{q}^{(s)}$. During validation and testing, $\mathcal{T}_{f}\cup\mathcal{T}_{tr}$ forms the fixed reasoning graph, and queries are drawn from $\mathcal{T}_{va}$ and $\mathcal{T}_{te}$, respectively. The topology and structural weights of the relation-co-occurrence graph are constructed once from $\mathcal{T}_{f}$ and remain fixed throughout training and evaluation, whereas its query-conditioned relational context is recomputed for each query and reasoning layer.
+
+The entity propagation graph is augmented with inverse edges and identity self-loops. For FB15k-237, query-associated one-hop edges are removed from $\mathcal{T}_{g}^{(s)}$ following the transductive protocol used by DiffusionE~\citep{Cao2024DiffusionE}. The inclusion of inverse incidences in the relation-co-occurrence graph follows the reported relation-context configuration.
+
+All experiments are conducted using Python 3.8 and PyTorch 2.3 on an NVIDIA GeForce RTX 4090 GPU. RPCD-GNN is optimized using Adam with an exponentially decayed learning rate. The principal backbone, training, relation-propagation, and phase-aggregation settings are reported in Table~\ref{tab:implementation-settings}; values are rounded for readability. The model is trained for at most 300 epochs. RPCD-specific parameters are selected according to validation MRR, and the checkpoint with the highest validation MRR is used for final evaluation. Results for RPCD-GNN in the main comparisons, ablation studies, and parameter sensitivity analyses are averaged over five independent runs.
+
+\subsection{Results and Analysis}\label{subsec:results-analysis}
+
+All reported results follow the filtered-ranking protocol described above. RPCD-GNN checkpoints are selected exclusively according to validation MRR. Baseline results are taken from published benchmark evaluations with compatible dataset partitions, candidate-ranking spaces, and filtering protocols. A dash denotes an unavailable result.
 
 Table~\ref{tab:main-results-small} presents the comparison on the compact Family and UMLS reasoning benchmarks, whereas Table~\ref{tab:main-results-large} reports results on WN18RR, FB15k-237, and NELL-995.
 
-RPCD-GNN achieves the best results across all reported metrics on UMLS and WN18RR. On UMLS, its MRR and Hits@1 reach 0.982 and 0.971, respectively, compared with the strongest baseline values of 0.970 and 0.957. On WN18RR, RPCD-GNN attains an MRR of 0.576, exceeding AdaProp by 0.014, while its Hits@1 and Hits@10 reach 0.524 and 0.679. These results demonstrate the effectiveness of the proposed method on both a compact biomedical graph and a larger lexical graph.
+RPCD-GNN achieves the best results across all reported metrics on UMLS, WN18RR, and NELL-995. On UMLS, its MRR and Hits@1 reach 0.982 and 0.971, respectively, compared with the strongest baseline values of 0.970 and 0.957. On WN18RR, RPCD-GNN attains an MRR of 0.576, exceeding AdaProp by 0.014, while its Hits@1 and Hits@10 reach 0.524 and 0.679. On NELL-995, its MRR, Hits@1, and Hits@10 reach 0.566, 0.509, and 0.667, respectively, compared with 0.559, 0.496, and 0.662 for Top-p reasoning. These results demonstrate the effectiveness of the proposed method across graphs with different scales and relation vocabularies.
 
-The gains vary across the other datasets. On FB15k-237, RPCD-GNN matches AdaProp in MRR at the reported precision (0.417), although its Hits@1 and Hits@10 remain below the best baseline results. On Family, where leading methods already achieve near-perfect scores, RPCD-GNN ties for the best Hits@1 and remains close to the highest MRR. On NELL-995, it obtains the second-best Hits@10 of 0.657 but does not achieve the best MRR or Hits@1. Thus, the method is competitive across the evaluated benchmarks, with its clearest advantages on UMLS and WN18RR. The following ablation study examines the contributions of its two components.
+The gains vary across the other datasets. On FB15k-237, RPCD-GNN matches AdaProp in MRR at the reported precision (0.417), although its Hits@1 and Hits@10 remain below the best baseline results. On Family, where leading methods already achieve near-perfect scores, RPCD-GNN ties for the best Hits@1 and remains close to the highest MRR. These comparisons indicate competitive performance across the evaluated benchmarks. The following ablation study examines the contributions of its two components.
 
 \subsection{Ablation Study}\label{subsec:ablation-study}
 
-To assess how query-conditioned relational context and phase-aware message aggregation affect reasoning performance, we construct two controlled variants of RPCD-GNN. RPCD-GNN w/o relational context disables the relational controller and uses base relation representations in message content, gating, and phase encoding. RPCD-GNN w/o phase-coherent aggregation removes the phase-aware aggregation branch and retains direct aggregation for candidate-state updating. All other configurations remain unchanged.
+To assess how query-conditioned relational context and phase-aware message aggregation affect reasoning performance, we construct two controlled variants of RPCD-GNN. RPCD-GNN w/o relational context disables the relational controller and uses base relation representations in message content, gating, and phase encoding. RPCD-GNN w/o phase-coherent aggregation removes the phase-aware aggregation branch and retains direct aggregation for candidate-state updating. All other configurations remain unchanged. Table~\ref{tab:ablation-modules} compares the two variants with the full model.
 
-\begin{table*}[t]
-\caption{Ablation results of RPCD-GNN on WN18RR, FB15k-237, and NELL-995.}
+\begin{table}[width=\columnwidth,pos=htbp]
+\caption{Ablation results on WN18RR, FB15k-237, and NELL-995.}
 \label{tab:ablation-modules}
 \centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{lrrrrrr}
-\hline
-Variant
-& \multicolumn{2}{c}{WN18RR}
-& \multicolumn{2}{c}{FB15k-237}
-& \multicolumn{2}{c}{NELL-995} \\
-\cline{2-7}
+\papertablestyle
+\setlength{\tabcolsep}{1.5pt}
+\begin{tabular*}{\linewidth}{@{}l@{\extracolsep{\fill}}rrrrrr@{}}
+\toprule
+Dataset & \multicolumn{2}{c}{w/o RC} & \multicolumn{2}{c}{w/o PA} & \multicolumn{2}{c}{Full} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
 & MRR & H@10 & MRR & H@10 & MRR & H@10 \\
-\hline
-RPCD-GNN w/o relational context & 0.563 & 0.662 & 0.407 & 0.575 & 0.531 & 0.643 \\
-RPCD-GNN w/o phase-coherent aggregation & 0.569 & 0.670 & 0.411 & 0.578 & 0.539 & 0.646 \\
-RPCD-GNN & 0.576 & 0.679 & 0.417 & 0.586 & 0.549 & 0.657 \\
-\hline
-\end{tabular}
-\end{table*}
+\midrule
+WN18RR & 0.563 & 0.662 & 0.569 & 0.670 & \textbf{0.576} & \textbf{0.679} \\
+FB15k-237 & 0.407 & 0.575 & 0.411 & 0.578 & \textbf{0.417} & \textbf{0.586} \\
+NELL-995 & 0.531 & 0.643 & 0.539 & 0.646 & \textbf{0.566} & \textbf{0.667} \\
+\bottomrule
+\end{tabular*}
+\par\smallskip
+\parbox{\linewidth}{\footnotesize\emph{Note:} RC denotes relational context; PA denotes phase-coherent aggregation. Full denotes RPCD-GNN.}
+\end{table}
 
-Removing either component reduces both MRR and Hits@10 on all three datasets. Without relational context, MRR decreases by 0.013, 0.010, and 0.018 on WN18RR, FB15k-237, and NELL-995, respectively. Removing the phase-aware branch yields corresponding decreases of 0.007, 0.006, and 0.010. Under the evaluated configurations, relational-context removal causes the larger MRR decrease, while the phase-aware branch also contributes consistently to performance. These comparisons support the contribution of both components to RPCD-GNN.
-
-\subsection{Relational Context Analysis}\label{subsec:relation-context-analysis}
-
-We analyze the relation-co-occurrence graphs constructed on the five datasets. The reported statistics characterize the effective relation vocabulary, the candidate relation associations that pass thresholding, and the relational structure retained after optional relation-wise Top-$K_r$ pruning. We report the number of effective relation types, candidate non-self associations, retained non-self associations, graph density, average non-self degree, and relation coverage. Identity self-loops are excluded from the density, degree, and coverage statistics.
-
-\begin{table*}[t]
-\caption{Statistics of the relation-co-occurrence graphs under the selected dataset-specific configurations.}
-\label{tab:relation-context-statistics}
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{lrrrrrr}
-\hline
-Dataset & $|\mathcal{R}'|$ & Candidate assoc. & Retained assoc. & Density & Avg. degree & Coverage \\
-\hline
-Family & 25 & 60 & 60 & 0.1000 & 2.4000 & 0.4800 \\
-UMLS & 93 & 2,151 & 2,151 & 0.2514 & 23.1290 & 0.9677 \\
-WN18RR & 23 & 47 & 47 & 0.0929 & 2.0435 & 0.4783 \\
-FB15k-237 & 475 & 7,572 & 7,572 & 0.0336 & 15.9411 & 0.4926 \\
-NELL-995 & 401 & 3,247 & 3,247 & 0.0202 & 8.0973 & 0.4863 \\
-\hline
-\end{tabular}
-\end{table*}
-
-Candidate associations count non-self relation pairs that pass the weight threshold before Top-$K_r$ pruning, whereas retained associations count those preserved after thresholding and, when applicable, relation-wise Top-$K_r$ pruning. Density is measured over all possible directed non-self pairs in $\mathcal{R}'$, average degree is the mean retained non-self out-degree over $\mathcal{R}'$, and coverage is the proportion of relation types in $\mathcal{R}'$ with at least one retained non-self neighbor. The vocabulary includes original and inverse relations and the identity relation, even when a type has no non-self associations. Consequently, coverage depends in part on whether inverse incidences are included in graph construction. Under the selected configurations, candidate and retained association counts coincide on all five datasets, indicating that relation-wise Top-$K_r$ pruning removes no additional associations after thresholding.
-
-To examine whether query-conditioned relational context changes the composition of propagation edges, we compare RPCD-GNN with its variant without relational context on UMLS and FB15k-237, as shown in Fig.~\ref{fig:relation-context-heatmap}. For each query relation, we pool the selected propagation edges across all reasoning layers and test queries. Each cell reports the proportion of the corresponding relation type among all selected edges for that query relation. The denominator includes all relation types, although only ten are displayed for readability. The row-wise distributions illustrate how the composition of selected edges varies across query relations.
+Removing either component reduces both MRR and Hits@10 on all three datasets. Without relational context, MRR decreases by 0.013, 0.010, and 0.035 on WN18RR, FB15k-237, and NELL-995, respectively. Removing the phase-aware branch yields corresponding decreases of 0.007, 0.006, and 0.027. Under the evaluated configurations, relational-context removal causes the larger MRR decrease, while the phase-aware branch also contributes consistently to performance. These comparisons support the contribution of both components to RPCD-GNN.
 
 \begin{figure*}[t]
   \centering
@@ -880,11 +861,36 @@ To examine whether query-conditioned relational context changes the composition 
   \label{fig:relation-context-heatmap}
 \end{figure*}
 
+\subsection{Relational Context Analysis}\label{subsec:relation-context-analysis}
+
+We analyze the relation-co-occurrence graphs constructed on the five datasets. Their structural statistics are reported in Table~\ref{tab:relation-context-statistics}. The reported statistics characterize the effective relation vocabulary, the candidate relation associations that pass thresholding, and the relational structure retained after optional relation-wise Top-$K_r$ pruning. We report the number of effective relation types, candidate non-self associations, retained non-self associations, graph density, average non-self degree, and relation coverage. Identity self-loops are excluded from the density, degree, and coverage statistics.
+
+\begin{table}[width=\columnwidth,pos=htbp]
+\caption{Relation-co-occurrence graph statistics under the selected configurations.}
+\label{tab:relation-context-statistics}
+\centering
+\papertablestyle
+\setlength{\tabcolsep}{1.5pt}
+\begin{tabular*}{\linewidth}{@{}l@{\extracolsep{\fill}}rrrrrr@{}}
+\toprule
+Dataset & $|\mathcal{R}'|$ & Cand. & Kept & Density & Degree & Cov. \\
+\midrule
+Family & 25 & 60 & 60 & 0.1000 & 2.4000 & 0.4800 \\
+UMLS & 93 & 2,151 & 2,151 & 0.2514 & 23.1290 & 0.9677 \\
+WN18RR & 23 & 47 & 47 & 0.0929 & 2.0435 & 0.4783 \\
+FB15k-237 & 475 & 7,572 & 7,572 & 0.0336 & 15.9411 & 0.4926 \\
+NELL-995 & 401 & 3,247 & 3,247 & 0.0202 & 8.0973 & 0.4863 \\
+\bottomrule
+\end{tabular*}
+\par\smallskip
+\parbox{\linewidth}{\footnotesize\emph{Note:} Cand. and Kept count candidate and retained non-self associations. Degree is the average non-self out-degree; Cov. denotes relation coverage.}
+\end{table}
+
+Candidate associations count non-self relation pairs that pass the weight threshold before Top-$K_r$ pruning, whereas retained associations count those preserved after thresholding and, when applicable, relation-wise Top-$K_r$ pruning. Density is measured over all possible directed non-self pairs in $\mathcal{R}'$, average degree is the mean retained non-self out-degree over $\mathcal{R}'$, and coverage is the proportion of relation types in $\mathcal{R}'$ with at least one retained non-self neighbor. The vocabulary includes original and inverse relations and the identity relation, even when a type has no non-self associations. Consequently, coverage depends in part on whether inverse incidences are included in graph construction. Under the selected configurations, candidate and retained association counts coincide on all five datasets, indicating that relation-wise Top-$K_r$ pruning removes no additional associations after thresholding.
+
+To examine whether query-conditioned relational context changes the composition of propagation edges, we compare RPCD-GNN with its variant without relational context on UMLS and FB15k-237, as shown in Fig.~\ref{fig:relation-context-heatmap}. For each query relation, we pool the selected propagation edges across all reasoning layers and test queries. Each cell reports the proportion of the corresponding relation type among all selected edges for that query relation. The denominator includes all relation types, although only ten are displayed for readability. The row-wise distributions illustrate how the composition of selected edges varies across query relations.
+
 For the displayed query relations, RPCD-GNN shows greater variation in relation-type proportions than the variant without relational context. This observation suggests that relational context influences the composition of selected propagation edges across queries, complementing the performance comparison in the ablation study.
-
-\subsection{Parameter Sensitivity Analysis}\label{subsec:parameter-sensitivity}
-
-The sensitivity study varies the entity-propagation depth $L$ and the phase-aware aggregation weight $\eta$ one at a time on WN18RR and FB15k-237 while holding the remaining validation-selected configuration fixed, as shown in Fig.~\ref{fig:parameter-sensitivity}. The depth $L$ controls the number of entity-propagation steps, whereas $\eta$ controls the contribution of phase-coherent messages to the candidate-state update. The evaluated grids are $L\in\{5,6,7,8,9,10\}$ and $\eta\in\{0,0.1,0.3,0.6,1.0\}$. For each parameter configuration, we train the model separately and evaluate the checkpoint selected by validation MRR on the test set. The curves report test MRR and Hits@10 under the averaging convention specified in Section~\ref{subsec:implementation-details}. The test set is not used to select the operating configuration.
 
 \begin{figure*}[t]
   \centering
@@ -900,13 +906,13 @@ The sensitivity study varies the entity-propagation depth $L$ and the phase-awar
   \label{fig:parameter-sensitivity}
 \end{figure*}
 
+\subsection{Parameter Sensitivity Analysis}\label{subsec:parameter-sensitivity}
+
+The sensitivity study varies the entity-propagation depth $L$ and the phase-aware aggregation weight $\eta$ one at a time on WN18RR and FB15k-237 while holding the remaining validation-selected configuration fixed, as shown in Fig.~\ref{fig:parameter-sensitivity}. The depth $L$ controls the number of entity-propagation steps, whereas $\eta$ controls the contribution of phase-coherent messages to the candidate-state update. The evaluated grids are $L\in\{5,6,7,8,9,10\}$ and $\eta\in\{0,0.1,0.3,0.6,1.0\}$. For each parameter configuration, we train the model separately and evaluate the checkpoint selected by validation MRR on the test set. The curves report test MRR and Hits@10 under the averaging convention specified in Section~\ref{subsec:implementation-details}. The test set is not used to select the operating configuration.
+
 Within the evaluated range, performance initially improves as the entity-propagation depth $L$ increases, reaching its highest values at $L=8$ on WN18RR and $L=7$ on FB15k-237. Further increasing the depth reduces both MRR and Hits@10. These results indicate that additional propagation steps are beneficial up to a dataset-dependent depth, while deeper propagation does not necessarily improve prediction accuracy.
 
 The effect of the phase-aware aggregation weight $\eta$ also differs across datasets. WN18RR achieves its highest performance at $\eta=0.1$, whereas FB15k-237 favors $\eta=0.6$. Both datasets benefit from a nonzero phase-aware contribution, but increasing its weight beyond these values reduces performance. This suggests that the contribution of the phase-aware branch should be balanced with that of direct aggregation.
-
-\subsection{Illustrative Reasoning Example}\label{subsec:case-study}
-
-Figure~\ref{fig:reasoning-path-case} presents an illustrative reasoning subgraph constructed with UMLS entity and relation names for the query \texttt{(Pharmacologic\_Substance, Treats, ?)}, with \texttt{Disease\_or\_Syndrome} as a candidate answer. The example shows how query-conditioned relational context informs message computation and how phase-aware aggregation combines incoming messages at a candidate entity.
 
 \begin{figure*}[t]
   \centering
@@ -915,13 +921,19 @@ Figure~\ref{fig:reasoning-path-case} presents an illustrative reasoning subgraph
   \label{fig:reasoning-path-case}
 \end{figure*}
 
+\subsection{Illustrative Reasoning Example}\label{subsec:case-study}
+
+Figure~\ref{fig:reasoning-path-case} presents an illustrative reasoning subgraph constructed with UMLS entity and relation names for the query \texttt{(Pharmacologic\_Substance, Treats, ?)}, with \texttt{Disease\_or\_Syndrome} as a candidate answer. The example shows how query-conditioned relational context informs message computation and how phase-aware aggregation combines incoming messages at a candidate entity.
+
 The example highlights two complementary stages of RPCD-GNN. Query-conditioned relational context is incorporated into message content, gating, and phase encoding. When messages from different branches reach the same candidate, their learned phases affect the real and imaginary aggregates. These aggregates and their stabilized amplitudes form the phase-aware branch, which is combined with direct aggregation to update the candidate state.
+
+\FloatBarrier
 
 \section{Conclusion}\label{sec:conclusion}
 
 In this paper, we proposed RPCD-GNN, a progressive knowledge graph reasoning framework that coordinates query-conditioned relational context with phase-aware message aggregation. A relational controller generates layer-wise contexts that jointly regulate message content, admission gates, and interaction phases. A complex-domain aggregation operator models phase-dependent interactions among messages converging on the same candidate and combines them with direct message accumulation for entity-state updating.
 
-Experiments on five benchmark datasets demonstrate competitive link-prediction performance, with the best results among the compared methods on UMLS and WN18RR across all reported metrics. Ablation studies further show that both the relational controller and phase-aware aggregation contribute to the reported performance.
+Experiments on five benchmark datasets demonstrate competitive link-prediction performance, with the best results among the compared methods on UMLS, WN18RR, and NELL-995 across all reported metrics. Ablation studies further show that both the relational controller and phase-aware aggregation contribute to the reported performance.
 
 The current framework uses a fixed relation-co-occurrence graph. Future work will explore adaptive updates to this graph and the integration of textual information to enrich query-conditioned relational context.
 
@@ -954,7 +966,6 @@ The current framework uses a fixed relation-co-occurrence graph. Future work wil
 %%    \includegraphics{}
 %    \caption{}\label{fig1}
 %\end{figure}
-
 
 %\begin{table}%[]
 %\caption{}\label{tbl1}
